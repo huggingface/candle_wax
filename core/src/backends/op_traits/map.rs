@@ -1,7 +1,5 @@
 use crate::layout::Layout;
 
-pub mod relu;
-
 pub trait Map<U, V, F>
 where
     F: MapFunc<U, V>,

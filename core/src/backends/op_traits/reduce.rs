@@ -1,7 +1,5 @@
 use crate::layout::Layout;
 
-pub mod sum;
-
 pub trait Reduce<U, V, F>
 where
     F: ReduceFunc<U, V>,

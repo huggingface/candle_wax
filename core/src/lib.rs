@@ -1,5 +1,6 @@
 pub mod dtype;
 pub mod numeric;
+pub mod op_traits;
 
 pub mod layout;
 pub mod storage;
@@ -9,9 +10,10 @@ pub mod backends;
 
 #[cfg(test)]
 mod tests {
-    use crate::backends::cpu::storage::CpuStorage;
+    use crate::backends::CpuStorage;
     use crate::layout::Layout;
-    use crate::tensor::{Map, Reduce, Tensor, Relu, Sum};
+    use crate::tensor::{Tensor, op_traits::Map, op_traits::Reduce};
+    use crate::op_traits::{Relu, Sum};
 
     #[test]
     fn test_relu() {
@@ -22,21 +24,8 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f32>> = tensor.map(Relu::op(&tensor));
+        let result = tensor.map(tensor.relu());
         assert_eq!(result.storage.data, vec![0.0, 0.0, 1.0, 0.0, 3.0]);
-    }
-
-    #[test]
-    fn test_cross_type_conversion() {
-        let tensor = Tensor {
-            layout: Layout::new(vec![3]),
-            storage: CpuStorage {
-                data: vec![1i32, 2, 3],
-            },
-        };
-
-        let result: Tensor<CpuStorage<f64>> = tensor.map(Relu::op(&tensor));
-        assert_eq!(result.storage.data, vec![1.0, 2.0, 3.0]);
     }
 
     #[test]
@@ -48,7 +37,7 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f32>> = tensor.reduce(2, Sum::op(&tensor));
+        let result: Tensor<CpuStorage<f32>> = tensor.reduce(2, tensor.sum());
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }

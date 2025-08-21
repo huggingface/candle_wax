@@ -83,11 +83,11 @@ pub fn generate_op_impl(
     };
 
     quote! {
-        impl<U, V, F> crate::backends::storage::#op_ident<U, V, F> for #storage_name<U>
+        impl<U, V, F> crate::backends::op_traits::#op_ident<U, V, F> for #storage_name<U>
         where
             U: super::dtype::#inner_type,
             V: super::dtype::#inner_type,
-            F: crate::backends::storage::#op_func_ident<U, V, InputStorage<U> = #storage_name<U>, OutputStorage<V> = #storage_name<V>>,
+            F: crate::backends::op_traits::#op_func_ident<U, V, InputStorage<U> = #storage_name<U>, OutputStorage<V> = #storage_name<V>>,
         {
             type OutputStorage = #storage_name<V>;
 

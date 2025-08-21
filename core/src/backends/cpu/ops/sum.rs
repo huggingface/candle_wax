@@ -1,9 +1,10 @@
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::backends::storage::{ReduceFunc, Sum};
+use crate::backends::op_traits::ReduceFunc;
+use crate::op_traits::Sum;
 
-use super::super::super::dtype::CpuDtype;
-use super::super::super::storage::CpuStorage;
+use super::super::dtype::CpuDtype;
+use super::super::storage::CpuStorage;
 
 pub struct CpuSum;
 
@@ -55,9 +56,6 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<U, U> for CpuSum
 }
 
 impl<T: CpuDtype> Sum for CpuStorage<T> {
-    type Sum = CpuSum;
-
-    fn op(&self) -> Self::Sum {
-        CpuSum
-    }
+    type Op = CpuSum;
+    const OP: Self::Op = CpuSum;
 }

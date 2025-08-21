@@ -72,11 +72,11 @@ pub fn generate_tensor_op_impl(
     };
 
     quote! {
-        impl<S, T, U, V, F> #op_ident<U, V, F> for Tensor<S>
+        impl<S, T, U, V, F> crate::tensor::op_traits::#op_ident<U, V, F> for Tensor<S>
         where
-            S: Storage<Inner = U>,
-            T: Storage<Inner = V>,
-            F: crate::backends::storage::#op_func_ident<U, V, InputStorage<U> = S, OutputStorage<V> = T>,
+            S: crate::storage::Storage<Inner = U>,
+            T: crate::storage::Storage<Inner = V>,
+            F: crate::backends::op_traits::#op_func_ident<U, V, InputStorage<U> = S, OutputStorage<V> = T>,
         {
             type OutStorage = Tensor<T>;
 
