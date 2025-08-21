@@ -6,9 +6,9 @@ pub trait Map<U, V, F>
 where
     F: MapFunc<U, V>,
 {
-    type OutputStorage<T>;
+    type OutputStorage;
 
-    fn map(&self, layout: &Layout, f: F) -> Self::OutputStorage<V>;
+    fn map(&self, layout: &Layout, f: F) -> Self::OutputStorage;
 }
 
 pub trait MapFunc<U, V> {

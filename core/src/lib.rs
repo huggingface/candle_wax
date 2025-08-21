@@ -10,9 +10,8 @@ pub mod backends;
 #[cfg(test)]
 mod tests {
     use crate::backends::cpu::storage::CpuStorage;
-    use crate::backends::storage::{Relu, Sum};
     use crate::layout::Layout;
-    use crate::tensor::{Map, Reduce, Tensor};
+    use crate::tensor::{Map, Reduce, Tensor, Relu, Sum};
 
     #[test]
     fn test_relu() {
@@ -23,7 +22,7 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f32>> = tensor.map(&tensor.layout, Relu::op(&tensor.storage));
+        let result: Tensor<CpuStorage<f32>> = tensor.map(Relu::op(&tensor));
         assert_eq!(result.storage.data, vec![0.0, 0.0, 1.0, 0.0, 3.0]);
     }
 
@@ -36,7 +35,7 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f64>> = tensor.map(&tensor.layout, Relu::op(&tensor.storage));
+        let result: Tensor<CpuStorage<f64>> = tensor.map(Relu::op(&tensor));
         assert_eq!(result.storage.data, vec![1.0, 2.0, 3.0]);
     }
 
@@ -49,7 +48,7 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f32>> = tensor.reduce(&tensor.layout, 2, Sum::op(&tensor.storage));
+        let result: Tensor<CpuStorage<f32>> = tensor.reduce(2, Sum::op(&tensor));
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }

@@ -6,9 +6,9 @@ pub trait Reduce<U, V, F>
 where
     F: ReduceFunc<U, V>,
 {
-    type OutputStorage<T>;
+    type OutputStorage;
 
-    fn reduce(&self, layout: &Layout, dim: i32, f: F) -> Self::OutputStorage<V>;
+    fn reduce(&self, layout: &Layout, dim: i32, f: F) -> Self::OutputStorage;
 }
 
 pub trait ReduceFunc<U, V> {
