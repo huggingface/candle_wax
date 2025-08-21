@@ -1,8 +1,5 @@
 use core::{
-    backends::{
-        CpuStorage,
-        op_traits::{Map, MapFunc},
-    },
+    backends::op_traits::{Map, MapFunc},
     layout::Layout,
     numeric::Zero,
     op_traits::Relu,
@@ -70,7 +67,7 @@ where
 fn main() {
     let tensor = Tensor {
         layout: Layout::new(vec![2, 2, 2]),
-        storage: CpuStorage {
+        storage: MyNewStorage {
             data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],
         },
     };
