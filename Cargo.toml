@@ -1,2 +1,2 @@
 [workspace]
-members = ["core", "macros"]
+members = ["core", "examples", "macros"]

@@ -10,6 +10,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "examples"
+version = "0.1.0"
+dependencies = [
+ "core",
+ "macros",
+]
+
+[[package]]
 name = "macros"
 version = "0.1.0"
 dependencies = [

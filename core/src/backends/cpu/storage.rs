@@ -1,6 +1,14 @@
 use macros::{StorageOps};
 
 use crate::storage::Storage;
+use crate::backends::op_traits::{
+    Map,
+    MapFunc,
+    Reduce,
+    ReduceFunc,
+};
+use crate::layout::Layout;
+
 
 use super::dtype::CpuDtype;
 

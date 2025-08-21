@@ -71,23 +71,23 @@ pub fn generate_op_impl(
     let (_method_name, method_signature, method_call) = match op_type {
         "Map" => (
             format_ident!("map"),
-            quote! { fn map(&self, layout: &crate::layout::Layout, f: F) -> Self::OutputStorage },
+            quote! { fn map(&self, layout: &Layout, f: F) -> Self::OutputStorage },
             quote! { f.call(layout, self) },
         ),
         "Reduce" => (
             format_ident!("reduce"),
-            quote! { fn reduce(&self, layout: &crate::layout::Layout, dim: i32, f: F) -> Self::OutputStorage },
+            quote! { fn reduce(&self, layout: &Layout, dim: i32, f: F) -> Self::OutputStorage },
             quote! { f.call(layout, dim, self) },
         ),
         _ => panic!("Unknown operation type: {}", op_type),
     };
 
     quote! {
-        impl<U, V, F> crate::backends::op_traits::#op_ident<U, V, F> for #storage_name<U>
+        impl<U, V, F> #op_ident<U, V, F> for #storage_name<U>
         where
-            U: super::dtype::#inner_type,
-            V: super::dtype::#inner_type,
-            F: crate::backends::op_traits::#op_func_ident<U, V, InputStorage<U> = #storage_name<U>, OutputStorage<V> = #storage_name<V>>,
+            U: #inner_type,
+            V: #inner_type,
+            F: #op_func_ident<U, V, InputStorage<U> = #storage_name<U>, OutputStorage<V> = #storage_name<V>>,
         {
             type OutputStorage = #storage_name<V>;
 

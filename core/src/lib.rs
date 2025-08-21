@@ -37,7 +37,7 @@ mod tests {
             },
         };
 
-        let result: Tensor<CpuStorage<f32>> = tensor.reduce(2, tensor.sum());
+        let result = tensor.reduce(2, tensor.sum());
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }
