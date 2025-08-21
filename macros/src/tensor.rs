@@ -70,11 +70,11 @@ pub fn generate_tensor_op_impl(op_type: &str) -> proc_macro2::TokenStream {
     };
 
     quote! {
-        impl<S, T, U, V, F> crate::tensor::op_traits::#op_ident<U, V, F> for Tensor<S>
+        impl<S, T, U, V, F> #op_ident<U, V, F> for Tensor<S>
         where
-            S: crate::storage::Storage<Inner = U>,
-            T: crate::storage::Storage<Inner = V>,
-            F: crate::backends::op_traits::#op_func_ident<U, V, InputStorage<U> = S, OutputStorage<V> = T>,
+            S: Storage<Inner = U>,
+            T: Storage<Inner = V>,
+            F: #op_func_ident<U, V, InputStorage<U> = S, OutputStorage<V> = T>,
         {
             type OutStorage = Tensor<T>;
 
