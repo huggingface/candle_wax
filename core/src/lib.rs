@@ -12,8 +12,8 @@ pub mod backends;
 mod tests {
     use crate::backends::CpuStorage;
     use crate::layout::Layout;
-    use crate::tensor::{Tensor, op_traits::Map, op_traits::Reduce};
     use crate::op_traits::{Relu, Sum};
+    use crate::tensor::{Tensor, op_traits::Map, op_traits::Reduce};
 
     #[test]
     fn test_relu() {

@@ -43,9 +43,7 @@ fn parse_string_array(array: &ExprArray) -> Vec<String> {
         .collect()
 }
 
-pub fn generate_tensor_op_impl(
-    op_type: &str,
-) -> proc_macro2::TokenStream {
+pub fn generate_tensor_op_impl(op_type: &str) -> proc_macro2::TokenStream {
     let op_ident = format_ident!("{}", op_type);
     let op_func_ident = format_ident!("{}Func", op_type);
 

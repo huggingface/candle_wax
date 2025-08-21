@@ -19,7 +19,7 @@ impl Layout {
             .into_iter()
             .rev()
             .collect();
-        
+
         Self {
             shape,
             strides,

@@ -1,9 +1,5 @@
 pub mod map;
-pub use map::{
-    Map
-};
+pub use map::Map;
 
 pub mod reduce;
-pub use reduce::{
-    Reduce
-};
+pub use reduce::Reduce;

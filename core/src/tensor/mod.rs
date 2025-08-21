@@ -1,7 +1,7 @@
 use macros::TensorOps;
 
-use crate::storage::Storage;
 use crate::layout::Layout;
+use crate::storage::Storage;
 
 pub mod op_traits;
 pub mod ops;
@@ -12,8 +12,6 @@ pub struct Tensor<S: Storage> {
     pub storage: S,
 }
 
-impl<S: Storage> Tensor<S> {    
+impl<S: Storage> Tensor<S> {
     // Common view operations that work on all tensor types
 }
-
-

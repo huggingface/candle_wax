@@ -3,7 +3,9 @@ use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 
 mod storage;
-use storage::{extract_inner_type, generate_op_impl, parse_ops_attribute as storage_parse_ops_attribute};
+use storage::{
+    extract_inner_type, generate_op_impl, parse_ops_attribute as storage_parse_ops_attribute,
+};
 
 mod tensor;
 use tensor::{generate_tensor_op_impl, parse_ops_attribute as tensor_parse_ops_attribute};
@@ -27,7 +29,6 @@ pub fn derive_storage_ops(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
-
 
 #[proc_macro_derive(TensorOps, attributes(tensor_ops))]
 pub fn derive_tensor_ops(input: TokenStream) -> TokenStream {

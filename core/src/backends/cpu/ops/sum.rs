@@ -1,6 +1,6 @@
+use crate::backends::op_traits::ReduceFunc;
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::backends::op_traits::ReduceFunc;
 use crate::op_traits::Sum;
 
 use super::super::dtype::CpuDtype;
