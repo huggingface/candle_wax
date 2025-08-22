@@ -9,10 +9,22 @@ use core::{
     },
     numeric::Zero,
     storage::{
-        Storage,
-        cpu::{CpuDtype, CpuStorage},
+        Storage
     },
 };
+
+pub trait MyNewDtype: Clone {}
+
+impl MyNewDtype for f32 {}
+
+pub struct MyNewStorage<T: MyNewDtype>{
+    pub data: Vec<T>,
+}
+
+impl<T: MyNewDtype> Storage for MyNewStorage<T> {
+    type Inner = T;
+}
+
 
 #[derive(BackendOps)]
 #[backend_ops(ops = ["Map"])]
@@ -22,17 +34,17 @@ impl Backend for MyNewBackend {}
 
 pub struct MyNewBackendRelu;
 
-impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
+impl<U: MyNewDtype + Zero + std::cmp::PartialOrd> MapFunc<MyNewStorage<U>, MyNewStorage<U>, U, U>
     for MyNewBackendRelu
 {
-    fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
+    fn call(&self, _layout: &Layout, storage: &MyNewStorage<U>) -> MyNewStorage<U> {
         let transformed_data: Vec<U> = storage
             .data
             .iter()
             .map(|x| if *x > U::zero() { x.clone() } else { U::zero() })
             .collect();
 
-        CpuStorage {
+        MyNewStorage {
             data: transformed_data,
         }
     }
@@ -57,7 +69,7 @@ where
 fn main() {
     let tensor: Tensor<_, MyNewBackend> = Tensor::new(
         Layout::new(vec![2, 2, 2]),
-        CpuStorage {
+        MyNewStorage {
             data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],
         },
     );

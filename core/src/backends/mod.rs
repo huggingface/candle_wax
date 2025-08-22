@@ -2,8 +2,6 @@ pub(crate) mod op_traits;
 
 pub(crate) mod cpu;
 
-pub(crate) mod metal;
-
 pub use cpu::backend::CpuBackend;
 pub mod core_ops {
     pub use super::op_traits::{map::Map, reduce::Reduce};
