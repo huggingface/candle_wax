@@ -8,23 +8,20 @@ use core::{
         map::{MapFunc, Relu},
     },
     numeric::Zero,
-    storage::{
-        Storage
-    },
+    storage::Storage,
 };
 
 pub trait MyNewDtype: Clone {}
 
 impl MyNewDtype for f32 {}
 
-pub struct MyNewStorage<T: MyNewDtype>{
+pub struct MyNewStorage<T: MyNewDtype> {
     pub data: Vec<T>,
 }
 
 impl<T: MyNewDtype> Storage for MyNewStorage<T> {
     type Inner = T;
 }
-
 
 #[derive(BackendOps)]
 #[backend_ops(ops = ["Map"])]
