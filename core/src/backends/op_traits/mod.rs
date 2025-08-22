@@ -1,5 +1,5 @@
 pub mod map;
-pub use map::{Map, MapFunc};
+pub use map::{Map, MapFunc, Relu};
 
 pub mod reduce;
-pub use reduce::{Reduce, ReduceFunc};
+pub use reduce::{Reduce, ReduceFunc, Sum};

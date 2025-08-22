@@ -50,4 +50,24 @@ impl Layout {
         }
         indices
     }
+
+    pub fn reduce(&self, dim: usize) -> Self {
+        assert!(dim < self.shape.len(), "Dimension out of bounds");
+        let mut new_layout = self.clone();
+        new_layout.shape.remove(dim);
+        new_layout.strides.remove(dim);
+        new_layout
+    }
+
+    pub fn signed_dim_to_unsigned_dim(&self, dim: i32) -> usize {
+        let udim = if dim < 0 {
+            (self.shape.len() as i32 + dim) as usize
+        } else {
+            dim as usize
+        };
+        if self.shape.len() <= udim {
+            panic!("Dimension out of bounds");
+        }
+        udim
+    }
 }

@@ -1,6 +1,5 @@
 pub mod dtype;
 pub mod numeric;
-pub mod op_traits;
 
 pub mod layout;
 pub mod storage;
@@ -10,10 +9,11 @@ pub mod backends;
 
 #[cfg(test)]
 mod tests {
-    use crate::backends::CpuStorage;
+    use crate::backends::cpu::CpuBackend;
+    use crate::backends::op_traits::{Map, Reduce, Relu, Sum};
+    use crate::tensor::Tensor;
+    use crate::storage::cpu::CpuStorage;
     use crate::layout::Layout;
-    use crate::op_traits::{Relu, Sum};
-    use crate::tensor::{Tensor, op_traits::Map, op_traits::Reduce};
 
     #[test]
     fn test_relu() {
@@ -24,7 +24,7 @@ mod tests {
             },
         };
 
-        let result = tensor.map(tensor.relu());
+        let result = CpuBackend::map(&tensor, CpuBackend::RELU);
         assert_eq!(result.storage.data, vec![0.0, 0.0, 1.0, 0.0, 3.0]);
     }
 
@@ -37,7 +37,7 @@ mod tests {
             },
         };
 
-        let result = tensor.reduce(2, tensor.sum());
+        let result = CpuBackend::reduce(&tensor, 2, CpuBackend::SUM);
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }

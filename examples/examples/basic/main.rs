@@ -1,37 +1,25 @@
 use core::{
     backends::{
-        CpuStorage,
-        op_traits::{MapFunc, ReduceFunc},
+        cpu::CpuBackend,
+        op_traits::{Map, MapFunc, Reduce, ReduceFunc, Relu, Sum},
     },
     layout::Layout,
-    op_traits::{Relu, Sum},
-    storage::Storage,
-    tensor::{
-        Tensor,
-        op_traits::{Map, Reduce},
-    },
+    storage::{Storage, cpu::CpuStorage},
+    tensor::Tensor,
 };
 
-trait SumOp<T, S>: ReduceFunc<T, T, InputStorage<T> = S, OutputStorage<T> = S> {}
-
-impl<T, S, Op> SumOp<T, S> for Op where
-    Op: ReduceFunc<T, T, InputStorage<T> = S, OutputStorage<T> = S>
-{
-}
-
-trait ReluOp<T, S>: MapFunc<T, T, InputStorage<T> = S, OutputStorage<T> = S> {}
-
-impl<T, S, Op> ReluOp<T, S> for Op where Op: MapFunc<T, T, InputStorage<T> = S, OutputStorage<T> = S>
-{}
-
-fn run<S, T>(tensor: Tensor<S>) -> Tensor<S>
+fn run<S, B>(tensor: Tensor<S>) -> Tensor<S>
 where
-    S: Storage<Inner = T> + Sum + Relu,
-    <S as Sum>::Op: SumOp<T, S>,
-    <S as Relu>::Op: ReluOp<T, S>,
+    S: Storage,
+    B: Relu
+        + Sum
+        + Map<S, S, S::Inner, S::Inner, <B as Relu>::Relu>
+        + Reduce<S, S, S::Inner, S::Inner, <B as Sum>::Sum>,
+    <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
+    <B as Sum>::Sum: ReduceFunc<S, S, S::Inner, S::Inner>,
 {
-    let tensor = tensor.reduce(2, tensor.sum());
-    let tensor = tensor.map(tensor.relu());
+    let tensor = B::reduce(&tensor, 2, B::SUM);
+    let tensor = B::map(&tensor, B::RELU);
     tensor
 }
 
@@ -43,7 +31,7 @@ fn main() {
         },
     };
 
-    let result = run(tensor);
+    let result = run::<_, CpuBackend>(tensor);
 
     println!("Result: {:?}", result.storage.data);
 }

@@ -1,4 +1,4 @@
-pub mod dtype;
+pub mod backend;
+pub use backend::CpuBackend;
+
 pub mod ops;
-pub mod storage;
-pub use storage::CpuStorage;

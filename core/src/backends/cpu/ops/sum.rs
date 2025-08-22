@@ -1,26 +1,25 @@
 use crate::backends::op_traits::ReduceFunc;
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::op_traits::Sum;
+use crate::storage::cpu::{
+    CpuDtype,
+    CpuStorage
+};
+use crate::backends::cpu::{
+    CpuBackend
+};
+use crate::backends::op_traits::Sum;
 
-use super::super::dtype::CpuDtype;
-use super::super::storage::CpuStorage;
 
 pub struct CpuSum;
 
-impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<U, U> for CpuSum {
-    type InputStorage<A> = CpuStorage<U>;
-    type OutputStorage<B> = CpuStorage<U>;
+impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U> for CpuSum {
 
-    fn call(&self, layout: &Layout, dim: i32, storage: &CpuStorage<U>) -> CpuStorage<U> {
-        let actual_dim = if dim < 0 {
-            (layout.shape.len() as i32 + dim) as usize
-        } else {
-            dim as usize
-        };
+    fn call(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {
+        let udim = layout.signed_dim_to_unsigned_dim(dim);
 
         let mut output_shape = layout.shape.clone();
-        output_shape.remove(actual_dim);
+        output_shape.remove(udim);
 
         if output_shape.is_empty() {
             let total_sum = storage
@@ -40,9 +39,9 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<U, U> for CpuSum
             let output_indices = output_layout.unravel_index(output_idx);
 
             let mut sum = U::zero();
-            for reduce_idx in 0..layout.shape[actual_dim] {
+            for reduce_idx in 0..layout.shape[udim] {
                 let mut input_indices = output_indices.clone();
-                input_indices.insert(actual_dim, reduce_idx);
+                input_indices.insert(udim, reduce_idx);
 
                 let input_flat_idx = layout.ravel_index(&input_indices);
                 sum = sum + storage.data[input_flat_idx].clone();
@@ -55,7 +54,7 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<U, U> for CpuSum
     }
 }
 
-impl<T: CpuDtype> Sum for CpuStorage<T> {
-    type Op = CpuSum;
-    const OP: Self::Op = CpuSum;
+impl Sum for CpuBackend {
+    type Sum = CpuSum;
+    const SUM: Self::Sum = CpuSum;
 }

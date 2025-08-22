@@ -70,13 +70,14 @@ pub fn generate_tensor_op_impl(op_type: &str) -> proc_macro2::TokenStream {
     };
 
     quote! {
-        impl<S, T, U, V, F> #op_ident<U, V, F> for Tensor<S>
+        impl<B, S, T, U, V, F> #op_ident<U, V, F> for Tensor<S, B>
         where
+            B: Backend,
             S: Storage<Inner = U>,
             T: Storage<Inner = V>,
-            F: #op_func_ident<U, V, InputStorage<U> = S, OutputStorage<V> = T>,
+            F: #op_func_ident<U, V, InputStorage = S, OutputStorage = T>,
         {
-            type OutStorage = Tensor<T>;
+            type OutStorage = Tensor<T, B>;
 
             #method_signature {
                 #tensor_constructor
