@@ -6,13 +6,11 @@ pub fn parse_ops_attribute(attrs: &[Attribute]) -> Vec<String> {
         if attr.path().is_ident("backend_ops") {
             let mut ops_result = None;
             let _ = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("ops") {
-                    if let Ok(expr) = meta.value().and_then(|v| syn::Expr::parse(v)) {
-                        if let syn::Expr::Array(array) = expr {
+                if meta.path.is_ident("ops")
+                    && let Ok(expr) = meta.value().and_then(|v| syn::Expr::parse(v))
+                        && let syn::Expr::Array(array) = expr {
                             ops_result = Some(parse_string_array(&array));
                         }
-                    }
-                }
                 Ok(())
             });
             if let Some(ops) = ops_result {

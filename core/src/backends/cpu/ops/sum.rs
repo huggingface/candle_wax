@@ -30,7 +30,7 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
         let output_size = output_layout.shape.iter().product::<usize>();
         let mut output_data = vec![U::zero(); output_size];
 
-        for output_idx in 0..output_size {
+        for (output_idx, output_elem) in output_data.iter_mut().enumerate().take(output_size) {
             let output_indices = output_layout.unravel_index(output_idx);
 
             let mut sum = U::zero();
@@ -42,7 +42,7 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
                 sum = sum + storage.data[input_flat_idx].clone();
             }
 
-            output_data[output_idx] = sum;
+            *output_elem = sum;
         }
 
         CpuStorage { data: output_data }

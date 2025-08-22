@@ -59,8 +59,8 @@ where
     B: Relu + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
 {
-    let tensor = tensor.map(B::RELU);
-    tensor
+    
+    tensor.map(B::RELU)
 }
 
 fn main() {
