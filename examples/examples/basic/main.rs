@@ -21,7 +21,7 @@ where
     <B as Sum>::Sum: ReduceFunc<S, S, S::Inner, S::Inner>,
 {
     let tensor = tensor.reduce(2, B::SUM);
-    
+
     tensor.map(B::RELU)
 }
 

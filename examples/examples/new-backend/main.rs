@@ -50,7 +50,6 @@ where
     B: Relu + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
 {
-    
     tensor.map(B::RELU)
 }
 
