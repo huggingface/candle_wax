@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
+use crate::backends::Backend;
 use crate::backends::op_traits::{Map, MapFunc, Reduce, ReduceFunc};
 use crate::layout::Layout;
 use crate::storage::Storage;
-use crate::backends::Backend;
 
 pub struct Tensor<S: Storage, B: Backend> {
     pub layout: Layout,

@@ -1,28 +1,29 @@
+use macros::BackendOps;
+
 use core::{
-    backends::{cpu::CpuBackend, op_traits::{Map, MapFunc, Relu}, Backend}, layout::Layout, numeric::Zero, storage::{cpu::{CpuDtype, CpuStorage}, Storage}, tensor::Tensor
+    backends::{
+        Backend,
+        cpu::CpuBackend,
+        op_traits::{Map, MapFunc, Relu},
+    },
+    layout::Layout,
+    numeric::Zero,
+    storage::{
+        Storage,
+        cpu::{CpuDtype, CpuStorage},
+    },
+    tensor::Tensor,
 };
 
+#[derive(BackendOps)]
+#[backend_ops(ops = ["Map"])]
 struct MyNewBackend {}
-
-impl<B, S, T, U, V, F> Map<B, S, T, U, V, F> for MyNewBackend
-where
-    B: Backend,
-    S: Storage<Inner = U>,
-    T: Storage<Inner = V>,
-    F: MapFunc<S, T, U, V>,
-{
-
-    fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B> {
-        let layout = tensor.layout.clone();
-        let storage = f.call(&tensor.layout, &tensor.storage);
-        Tensor::new(layout, storage)
-    }
-}
 
 pub struct MyNewBackendRelu;
 
-impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U> for MyNewBackendRelu {
-
+impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
+    for MyNewBackendRelu
+{
     fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
         let transformed_data: Vec<U> = storage
             .data
@@ -40,7 +41,6 @@ impl Relu for MyNewBackend {
     type Relu = MyNewBackendRelu;
     const RELU: Self::Relu = MyNewBackendRelu;
 }
-
 
 fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>
 where

@@ -11,9 +11,9 @@ pub mod backends;
 mod tests {
     use crate::backends::cpu::CpuBackend;
     use crate::backends::op_traits::{Relu, Sum};
-    use crate::tensor::Tensor;
-    use crate::storage::cpu::CpuStorage;
     use crate::layout::Layout;
+    use crate::storage::cpu::CpuStorage;
+    use crate::tensor::Tensor;
 
     #[test]
     fn test_relu() {
@@ -34,10 +34,10 @@ mod tests {
             Layout::new(vec![2, 2, 2]),
             CpuStorage {
                 data: vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-            }
+            },
         );
 
-        let result = tensor.reduce( 2, CpuBackend::SUM);
+        let result = tensor.reduce(2, CpuBackend::SUM);
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }

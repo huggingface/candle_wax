@@ -3,7 +3,7 @@ use syn::{Attribute, Expr, ExprArray, ExprLit, Lit, parse::Parse};
 
 pub fn parse_ops_attribute(attrs: &[Attribute]) -> Vec<String> {
     for attr in attrs {
-        if attr.path().is_ident("tensor_ops") {
+        if attr.path().is_ident("backend_ops") {
             let mut ops_result = None;
             let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("ops") {
@@ -43,44 +43,44 @@ fn parse_string_array(array: &ExprArray) -> Vec<String> {
         .collect()
 }
 
-pub fn generate_tensor_op_impl(op_type: &str) -> proc_macro2::TokenStream {
+pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2::TokenStream {
     let op_ident = format_ident!("{}", op_type);
     let op_func_ident = format_ident!("{}Func", op_type);
 
-    let (method_signature, tensor_constructor) = match op_type {
+    let (method_signature, method_call) = match op_type {
         "Map" => (
-            quote! { fn map(&self, f: F) -> Self::OutStorage },
             quote! {
-                Tensor {
-                    layout: self.layout.clone(),
-                    storage: f.call(&self.layout, &self.storage),
-                }
+                fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B>
+            },
+            quote! {
+                let layout = tensor.layout.clone();
+                let storage = f.call(&tensor.layout, &tensor.storage);
+                Tensor::new(layout, storage)
             },
         ),
         "Reduce" => (
-            quote! { fn reduce(&self, dim: i32, f: F) -> Self::OutStorage },
             quote! {
-                Tensor {
-                    layout: self.layout.clone(),
-                    storage: f.call(&self.layout, dim, &self.storage) ,
-                }
+                fn reduce(tensor: &Tensor<S, B>, dim: i32, f: F) -> Tensor<T, B>
+            },
+            quote! {
+                let layout = tensor.layout.clone();
+                let storage = f.call(&tensor.layout, &tensor.storage, dim);
+                Tensor::new(layout, storage)
             },
         ),
         _ => panic!("Unknown operation type: {}", op_type),
     };
 
     quote! {
-        impl<B, S, T, U, V, F> #op_ident<U, V, F> for Tensor<S, B>
+        impl<B, S, T, U, V, F> #op_ident<B, S, T, U, V, F> for #backend_name
         where
             B: Backend,
             S: Storage<Inner = U>,
             T: Storage<Inner = V>,
-            F: #op_func_ident<U, V, InputStorage = S, OutputStorage = T>,
+            F: #op_func_ident<S, T, U, V>,
         {
-            type OutStorage = Tensor<T, B>;
-
             #method_signature {
-                #tensor_constructor
+                #method_call
             }
         }
     }

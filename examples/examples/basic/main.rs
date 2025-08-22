@@ -1,17 +1,19 @@
 use core::{
     backends::{
+        Backend,
         cpu::CpuBackend,
-        op_traits::{Map, MapFunc, Reduce, ReduceFunc, Relu, Sum}, Backend,
+        op_traits::{Map, MapFunc, Reduce, ReduceFunc, Relu, Sum},
     },
     layout::Layout,
-    storage::{cpu::CpuStorage, Storage},
+    storage::{Storage, cpu::CpuStorage},
     tensor::Tensor,
 };
 
 fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>
 where
     S: Storage,
-    B: Backend + Relu
+    B: Backend
+        + Relu
         + Sum
         + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>
         + Reduce<B, S, S, S::Inner, S::Inner, <B as Sum>::Sum>,

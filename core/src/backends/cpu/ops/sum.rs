@@ -1,20 +1,15 @@
+use crate::backends::cpu::CpuBackend;
 use crate::backends::op_traits::ReduceFunc;
+use crate::backends::op_traits::Sum;
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::storage::cpu::{
-    CpuDtype,
-    CpuStorage
-};
-use crate::backends::cpu::{
-    CpuBackend
-};
-use crate::backends::op_traits::Sum;
-
+use crate::storage::cpu::{CpuDtype, CpuStorage};
 
 pub struct CpuSum;
 
-impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U> for CpuSum {
-
+impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U>
+    for CpuSum
+{
     fn call(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {
         let udim = layout.signed_dim_to_unsigned_dim(dim);
 
