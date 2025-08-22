@@ -1,7 +1,6 @@
 use crate::{backends::Backend, layout::Layout, storage::Storage, tensor::Tensor};
 
 pub mod sum;
-pub use sum::Sum;
 
 pub trait Reduce<B, S, T, U, V, F>
 where

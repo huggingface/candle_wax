@@ -1,9 +1,9 @@
-use crate::backends::cpu::CpuBackend;
-use crate::backends::op_traits::MapFunc;
-use crate::backends::op_traits::Relu;
+use crate::backends::cpu::backend::CpuBackend;
+use crate::backends::op_traits::map::MapFunc;
+use crate::backends::op_traits::map::relu::Relu;
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::storage::cpu::{CpuDtype, CpuStorage};
+use crate::storage::cpu::{dtype::CpuDtype, storage::CpuStorage};
 
 pub struct CpuRelu;
 

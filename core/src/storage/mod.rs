@@ -1,5 +1,5 @@
 pub mod cpu;
-pub mod metal;
+pub(crate) mod metal;
 
 pub trait Storage {
     type Inner;

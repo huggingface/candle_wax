@@ -1,18 +1,21 @@
-pub mod dtype;
 pub mod numeric;
 
-pub mod layout;
+mod layout;
+pub use layout::Layout;
+
 pub mod storage;
-pub mod tensor;
+
+mod tensor;
+pub use tensor::Tensor;
 
 pub mod backends;
 
 #[cfg(test)]
 mod tests {
-    use crate::backends::cpu::CpuBackend;
-    use crate::backends::op_traits::{Relu, Sum};
+    use crate::backends::cpu::backend::CpuBackend;
+    use crate::backends::op_traits::{map::relu::Relu, reduce::sum::Sum};
     use crate::layout::Layout;
-    use crate::storage::cpu::CpuStorage;
+    use crate::storage::cpu::storage::CpuStorage;
     use crate::tensor::Tensor;
 
     #[test]

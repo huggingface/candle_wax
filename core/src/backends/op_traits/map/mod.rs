@@ -1,7 +1,6 @@
 use crate::{backends::Backend, layout::Layout, storage::Storage, tensor::Tensor};
 
 pub mod relu;
-pub use relu::Relu;
 
 pub trait Map<B, S, T, U, V, F>
 where

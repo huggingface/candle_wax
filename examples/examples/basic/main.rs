@@ -1,12 +1,12 @@
 use core::{
+    Layout, Tensor,
     backends::{
-        Backend,
-        cpu::CpuBackend,
-        op_traits::{Map, MapFunc, Reduce, ReduceFunc, Relu, Sum},
+        Backend, CpuBackend,
+        core_ops::{Map, Reduce},
+        map::{MapFunc, Relu},
+        reduce::{ReduceFunc, Sum},
     },
-    layout::Layout,
     storage::{Storage, cpu::CpuStorage},
-    tensor::Tensor,
 };
 
 fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>

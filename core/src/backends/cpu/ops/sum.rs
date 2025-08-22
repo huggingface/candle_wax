@@ -1,9 +1,9 @@
-use crate::backends::cpu::CpuBackend;
-use crate::backends::op_traits::ReduceFunc;
-use crate::backends::op_traits::Sum;
+use crate::backends::cpu::backend::CpuBackend;
+use crate::backends::op_traits::reduce::ReduceFunc;
+use crate::backends::op_traits::reduce::sum::Sum;
 use crate::layout::Layout;
 use crate::numeric::Zero;
-use crate::storage::cpu::{CpuDtype, CpuStorage};
+use crate::storage::cpu::{dtype::CpuDtype, storage::CpuStorage};
 
 pub struct CpuSum;
 

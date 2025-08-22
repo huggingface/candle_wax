@@ -1,18 +1,17 @@
 use macros::BackendOps;
 
 use core::{
+    Layout, Tensor,
     backends::{
-        Backend,
-        cpu::CpuBackend,
-        op_traits::{Map, MapFunc, Relu},
+        Backend, CpuBackend,
+        core_ops::Map,
+        map::{MapFunc, Relu},
     },
-    layout::Layout,
     numeric::Zero,
     storage::{
         Storage,
         cpu::{CpuDtype, CpuStorage},
     },
-    tensor::Tensor,
 };
 
 #[derive(BackendOps)]
