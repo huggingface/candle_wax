@@ -1,21 +1,21 @@
 use core::{
-    backends::op_traits::{Map, MapFunc, Relu}, layout::Layout, numeric::Zero, storage::{cpu::{CpuDtype, CpuStorage}, Storage}, tensor::Tensor
+    backends::{cpu::CpuBackend, op_traits::{Map, MapFunc, Relu}, Backend}, layout::Layout, numeric::Zero, storage::{cpu::{CpuDtype, CpuStorage}, Storage}, tensor::Tensor
 };
 
 struct MyNewBackend {}
 
-impl<S, T, U, V, F> Map<S, T, U, V, F> for MyNewBackend
+impl<B, S, T, U, V, F> Map<B, S, T, U, V, F> for MyNewBackend
 where
+    B: Backend,
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,
     F: MapFunc<S, T, U, V>,
 {
 
-    fn map(tensor: &Tensor<S>, f: F) -> Tensor<T> {
-        Tensor {
-            layout: tensor.layout.clone(),
-            storage: f.call(&tensor.layout, &tensor.storage),
-        }
+    fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B> {
+        let layout = tensor.layout.clone();
+        let storage = f.call(&tensor.layout, &tensor.storage);
+        Tensor::new(layout, storage)
     }
 }
 
@@ -42,25 +42,26 @@ impl Relu for MyNewBackend {
 }
 
 
-fn run<S, B>(tensor: Tensor<S>) -> Tensor<S>
+fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>
 where
     S: Storage,
-    B: Relu + Map<S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
+    B: Backend,
+    B: Relu + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
 {
-    let tensor = B::map(&tensor, B::RELU);
+    let tensor = tensor.map(B::RELU);
     tensor
 }
 
 fn main() {
-    let tensor = Tensor {
-        layout: Layout::new(vec![2, 2, 2]),
-        storage: CpuStorage {
+    let tensor: Tensor<_, CpuBackend> = Tensor::new(
+        Layout::new(vec![2, 2, 2]),
+        CpuStorage {
             data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],
         },
-    };
+    );
 
-    let result = run::<_, MyNewBackend>(tensor);
+    let result = run(tensor);
 
     println!("Result: {:?}", result.storage.data);
 }

@@ -1,15 +1,16 @@
-use crate::{layout::Layout, storage::Storage, tensor::Tensor};
+use crate::{backends::Backend, layout::Layout, storage::Storage, tensor::Tensor};
 
 pub mod sum;
 pub use sum::Sum;
 
-pub trait Reduce<S, T, U, V, F>
+pub trait Reduce<B, S, T, U, V, F>
 where
+    B: Backend,
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,
     F: ReduceFunc<S, T, U, V>,
 {
-    fn reduce(tensor: &Tensor<S>, dim: i32, f: F) -> Tensor<T>;
+    fn reduce(tensor: &Tensor<S, B>, dim: i32, f: F) -> Tensor<T, B>;
 }
 
 pub trait ReduceFunc<S, T, U, V>

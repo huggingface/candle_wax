@@ -1,35 +1,42 @@
+use crate::backends::Backend;
 use crate::backends::op_traits::{Map, MapFunc, Reduce, ReduceFunc};
 use crate::storage::Storage;
 use crate::tensor::Tensor;
 
 pub struct CpuBackend {}
 
-impl<S, T, U, V, F> Map<S, T, U, V, F> for CpuBackend
+impl<B, S, T, U, V, F> Map<B, S, T, U, V, F> for CpuBackend
 where
+    B: Backend,
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,
     F: MapFunc<S, T, U, V>,
 {
-
-    fn map(tensor: &Tensor<S>, f: F) -> Tensor<T> {
-        Tensor {
-            layout: tensor.layout.clone(),
-            storage: f.call(&tensor.layout, &tensor.storage),
-        }
+    fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B> {
+        let layout = tensor.layout.clone();
+        let storage = f.call(&tensor.layout, &tensor.storage);
+        Tensor::new(
+            layout,
+            storage
+        )
     }
 }
 
-impl <S, T, U, V, F> Reduce<S, T, U, V, F> for CpuBackend
+impl<B, S, T, U, V, F> Reduce<B, S, T, U, V, F> for CpuBackend
 where
+    B: Backend,
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,
     F: ReduceFunc<S, T, U, V>,
 {
-    fn reduce(tensor: &Tensor<S>, dim: i32, f: F) -> Tensor<T> {
-        let udim = tensor.layout.signed_dim_to_unsigned_dim(dim);
-        Tensor {
-            layout: tensor.layout.reduce(udim),
-            storage: f.call(&tensor.layout, &tensor.storage, dim),
-        }
+    fn reduce(tensor: &Tensor<S, B>, dim: i32, f: F) -> Tensor<T, B> {
+        let layout = tensor.layout.clone();
+        let storage = f.call(&tensor.layout, &tensor.storage, dim);
+        Tensor::new(
+            layout,
+            storage
+        )
     }
 }
+
+impl Backend for CpuBackend {}
