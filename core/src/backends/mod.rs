@@ -5,14 +5,14 @@ pub(crate) mod cpu;
 pub(crate) mod metal;
 
 pub use cpu::backend::CpuBackend;
-pub mod core_ops{
-    pub use super::op_traits::{map::{Map}, reduce::{Reduce}};
+pub mod core_ops {
+    pub use super::op_traits::{map::Map, reduce::Reduce};
 }
-pub mod map{
-    pub use super::op_traits::{map::{MapFunc, relu::Relu}};
+pub mod map {
+    pub use super::op_traits::map::{MapFunc, relu::Relu};
 }
-pub mod reduce{
-    pub use super::op_traits::{reduce::{ReduceFunc, sum::Sum}};
+pub mod reduce {
+    pub use super::op_traits::reduce::{ReduceFunc, sum::Sum};
 }
 
 pub trait Backend {}
