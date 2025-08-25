@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::backends::Backend;
 use crate::backends::op_traits::{
     map::{Map, MapFunc},
