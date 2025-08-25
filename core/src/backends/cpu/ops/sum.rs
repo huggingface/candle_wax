@@ -49,7 +49,12 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
     }
 }
 
+impl Default for CpuSum {
+    fn default() -> Self {
+        CpuSum
+    }
+}
+
 impl Sum for CpuBackend {
     type Sum = CpuSum;
-    const SUM: Self::Sum = CpuSum;
 }

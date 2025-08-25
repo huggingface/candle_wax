@@ -23,7 +23,12 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorag
     }
 }
 
+impl Default for CpuRelu {
+    fn default() -> Self {
+        CpuRelu
+    }
+}
+
 impl Relu for CpuBackend {
     type Relu = CpuRelu;
-    const RELU: Self::Relu = CpuRelu;
 }

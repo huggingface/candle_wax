@@ -47,9 +47,14 @@ impl<U: MyNewDtype + Zero + std::cmp::PartialOrd> MapFunc<MyNewStorage<U>, MyNew
     }
 }
 
+impl Default for MyNewBackendRelu {
+    fn default() -> Self {
+        MyNewBackendRelu
+    }
+}
+
 impl Relu for MyNewBackend {
     type Relu = MyNewBackendRelu;
-    const RELU: Self::Relu = MyNewBackendRelu;
 }
 
 fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>
@@ -59,7 +64,7 @@ where
     B: Relu + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
 {
-    tensor.map(B::RELU)
+    tensor.map(B::Relu::default())
 }
 
 fn main() {

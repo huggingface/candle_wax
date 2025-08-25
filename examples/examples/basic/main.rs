@@ -20,9 +20,9 @@ where
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
     <B as Sum>::Sum: ReduceFunc<S, S, S::Inner, S::Inner>,
 {
-    let tensor = tensor.reduce(2, B::SUM);
+    let tensor = tensor.reduce(2, B::Sum::default());
 
-    tensor.map(B::RELU)
+    tensor.map(B::Relu::default())
 }
 
 fn main() {

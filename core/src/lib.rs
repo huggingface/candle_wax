@@ -27,7 +27,7 @@ mod tests {
             },
         );
 
-        let result = tensor.map(CpuBackend::RELU);
+        let result = tensor.map(<CpuBackend as Relu>::Relu::default());
         assert_eq!(result.storage.data, vec![0.0, 0.0, 1.0, 0.0, 3.0]);
     }
 
@@ -40,7 +40,7 @@ mod tests {
             },
         );
 
-        let result = tensor.reduce(2, CpuBackend::SUM);
+        let result = tensor.reduce(2, <CpuBackend as Sum>::Sum::default());
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
     }
 }
