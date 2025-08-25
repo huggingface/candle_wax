@@ -68,7 +68,7 @@ where
 }
 
 fn main() {
-    let tensor= Tensor::new(
+    let tensor = Tensor::new(
         Layout::new(vec![2, 2, 2]),
         MyNewStorage {
             data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],

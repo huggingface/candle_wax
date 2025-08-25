@@ -10,15 +10,12 @@ use crate::storage::Storage;
 
 pub struct Tensor<S: Storage> {
     pub layout: Layout,
-    pub storage: S
+    pub storage: S,
 }
 
 impl<S: Storage> Tensor<S> {
     pub fn new(layout: Layout, storage: S) -> Self {
-        Self {
-            layout,
-            storage
-        }
+        Self { layout, storage }
     }
 }
 
@@ -29,10 +26,7 @@ impl<S: Storage> Tensor<S> {
         F: MapFunc<S, R, S::Inner, R::Inner>,
         B: Backend + Map<B, S, R, S::Inner, R::Inner, F>,
     {
-        Tensor::new(
-            self.layout.clone(),
-            f.call(&self.layout, &self.storage)
-        )
+        Tensor::new(self.layout.clone(), f.call(&self.layout, &self.storage))
     }
 }
 
@@ -44,8 +38,9 @@ impl<S: Storage> Tensor<S> {
         B: Backend + Reduce<B, S, R, S::Inner, R::Inner, F>,
     {
         Tensor::new(
-            self.layout.reduce(self.layout.signed_dim_to_unsigned_dim(dim)), 
-            f.call(&self.layout, &self.storage, dim)
+            self.layout
+                .reduce(self.layout.signed_dim_to_unsigned_dim(dim)),
+            f.call(&self.layout, &self.storage, dim),
         )
     }
 }

@@ -5,8 +5,8 @@ use crate::backends::op_traits::{
     map::{Map, MapFunc},
     reduce::{Reduce, ReduceFunc},
 };
-use crate::storage::Storage;
 use crate::layout::Layout;
+use crate::storage::Storage;
 
 #[derive(BackendOps)]
 pub struct CpuBackend {}
