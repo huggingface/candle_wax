@@ -1,4 +1,4 @@
-use crate::{backends::Backend, layout::Layout, storage::Storage, tensor::Tensor};
+use crate::{backends::Backend, layout::Layout, storage::Storage};
 
 pub mod relu;
 
@@ -9,7 +9,7 @@ where
     T: Storage<Inner = V>,
     F: MapFunc<S, T, U, V>,
 {
-    fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B>;
+    fn map(layout: &Layout, storage: &S, f: F) -> T;
 }
 
 pub trait MapFunc<S, T, U, V>

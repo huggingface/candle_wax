@@ -49,22 +49,18 @@ pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2
     let (method_signature, method_call) = match op_type {
         "Map" => (
             quote! {
-                fn map(tensor: &Tensor<S, B>, f: F) -> Tensor<T, B>
+                fn map(layout: &Layout, storage: &S, f: F) -> T
             },
             quote! {
-                let layout = tensor.layout.clone();
-                let storage = f.call(&tensor.layout, &tensor.storage);
-                Tensor::new(layout, storage)
+                f.call(&layout, &storage)
             },
         ),
         "Reduce" => (
             quote! {
-                fn reduce(tensor: &Tensor<S, B>, dim: i32, f: F) -> Tensor<T, B>
+                fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T
             },
             quote! {
-                let layout = tensor.layout.clone();
-                let storage = f.call(&tensor.layout, &tensor.storage, dim);
-                Tensor::new(layout, storage)
+                f.call(&layout, &storage, dim)
             },
         ),
         _ => panic!("Unknown operation type: {}", op_type),

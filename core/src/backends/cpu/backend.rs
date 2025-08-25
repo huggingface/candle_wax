@@ -6,7 +6,7 @@ use crate::backends::op_traits::{
     reduce::{Reduce, ReduceFunc},
 };
 use crate::storage::Storage;
-use crate::tensor::Tensor;
+use crate::layout::Layout;
 
 #[derive(BackendOps)]
 pub struct CpuBackend {}

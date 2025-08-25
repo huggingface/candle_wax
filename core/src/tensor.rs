@@ -8,40 +8,44 @@ use crate::backends::op_traits::{
 use crate::layout::Layout;
 use crate::storage::Storage;
 
-pub struct Tensor<S: Storage, B: Backend> {
+pub struct Tensor<S: Storage> {
     pub layout: Layout,
-    pub storage: S,
-    backend: PhantomData<B>,
+    pub storage: S
 }
 
-impl<S: Storage, B: Backend> Tensor<S, B> {
+impl<S: Storage> Tensor<S> {
     pub fn new(layout: Layout, storage: S) -> Self {
         Self {
             layout,
-            storage,
-            backend: PhantomData,
+            storage
         }
     }
 }
 
-impl<S: Storage, B: Backend> Tensor<S, B> {
-    pub fn map<F, R>(self, f: F) -> Tensor<R, B>
+impl<S: Storage> Tensor<S> {
+    pub fn map<B, F, R>(self, f: F) -> Tensor<R>
     where
         R: Storage,
         F: MapFunc<S, R, S::Inner, R::Inner>,
-        B: Map<B, S, R, S::Inner, R::Inner, F>,
+        B: Backend + Map<B, S, R, S::Inner, R::Inner, F>,
     {
-        B::map(&self, f)
+        Tensor::new(
+            self.layout.clone(),
+            f.call(&self.layout, &self.storage)
+        )
     }
 }
 
-impl<S: Storage, B: Backend> Tensor<S, B> {
-    pub fn reduce<F, R>(self, dim: i32, f: F) -> Tensor<R, B>
+impl<S: Storage> Tensor<S> {
+    pub fn reduce<B, F, R>(self, dim: i32, f: F) -> Tensor<R>
     where
         R: Storage,
         F: ReduceFunc<S, R, S::Inner, R::Inner>,
-        B: Reduce<B, S, R, S::Inner, R::Inner, F>,
+        B: Backend + Reduce<B, S, R, S::Inner, R::Inner, F>,
     {
-        B::reduce(&self, dim, f)
+        Tensor::new(
+            self.layout.reduce(self.layout.signed_dim_to_unsigned_dim(dim)), 
+            f.call(&self.layout, &self.storage, dim)
+        )
     }
 }

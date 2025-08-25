@@ -57,25 +57,25 @@ impl Relu for MyNewBackend {
     type Relu = MyNewBackendRelu;
 }
 
-fn run<S, B>(tensor: Tensor<S, B>) -> Tensor<S, B>
+fn run<S, B>(tensor: Tensor<S>) -> Tensor<S>
 where
     S: Storage,
     B: Backend,
     B: Relu + Map<B, S, S, S::Inner, S::Inner, <B as Relu>::Relu>,
     <B as Relu>::Relu: MapFunc<S, S, S::Inner, S::Inner>,
 {
-    tensor.map(B::Relu::default())
+    tensor.map::<B, _, _>(B::Relu::default())
 }
 
 fn main() {
-    let tensor: Tensor<_, MyNewBackend> = Tensor::new(
+    let tensor= Tensor::new(
         Layout::new(vec![2, 2, 2]),
         MyNewStorage {
             data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],
         },
     );
 
-    let result = run(tensor);
+    let result = run::<_, MyNewBackend>(tensor);
 
     println!("Result: {:?}", result.storage.data);
 }
