@@ -5,18 +5,18 @@ pub use layout::Layout;
 
 pub mod storage;
 
-mod tensor;
-pub use tensor::Tensor;
+pub mod tensor;
 
 pub mod backends;
 
 #[cfg(test)]
 mod tests {
+    use crate::backends::Backend;
     use crate::backends::cpu::backend::CpuBackend;
     use crate::backends::op_traits::{map::relu::Relu, reduce::sum::Sum};
     use crate::layout::Layout;
     use crate::storage::cpu::storage::CpuStorage;
-    use crate::tensor::Tensor;
+    use crate::tensor::{LazyTensor, Tensor};
 
     #[test]
     fn test_relu() {
@@ -42,5 +42,21 @@ mod tests {
 
         let result = tensor.reduce::<CpuBackend, _, _>(2, <CpuBackend as Sum>::Sum::default());
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
+    }
+
+    #[test]
+    fn test_lazy() {
+        let tensor = Tensor::new(
+            Layout::new(vec![2, 2, 2]),
+            CpuStorage {
+                data: vec![1.0f32, 2.0, -3.0, -4.0, 5.0, 6.0, -7.0, -8.0],
+            },
+        );
+
+        let tensor = LazyTensor::from(tensor);
+        let tensor = tensor.reduce(2, Box::new(<CpuBackend as Sum>::Sum::default()));
+        let tensor = tensor.map(Box::new(<CpuBackend as Relu>::Relu::default()));
+        let result = CpuBackend::eval(&tensor);
+        assert_eq!(result.storage.data, vec![3.0, 0.0, 11.0, 0.0]);
     }
 }

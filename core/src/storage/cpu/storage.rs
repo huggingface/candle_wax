@@ -2,6 +2,7 @@ use crate::storage::Storage;
 
 use super::dtype::CpuDtype;
 
+#[derive(Clone)]
 pub struct CpuStorage<T: CpuDtype> {
     pub data: Vec<T>,
 }

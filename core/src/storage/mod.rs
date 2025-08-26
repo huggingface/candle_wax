@@ -1,5 +1,5 @@
 pub mod cpu;
 
-pub trait Storage {
+pub trait Storage: Clone {
     type Inner;
 }

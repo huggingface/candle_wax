@@ -7,8 +7,29 @@ use crate::backends::op_traits::{
 };
 use crate::layout::Layout;
 use crate::storage::Storage;
+use crate::tensor::{LazyTensor, Tensor};
 
 #[derive(BackendOps)]
 pub struct CpuBackend {}
 
-impl Backend for CpuBackend {}
+impl Backend for CpuBackend {
+    fn eval<S: Storage>(tensor: &LazyTensor<S>) -> Tensor<S> {
+        match tensor {
+            LazyTensor::Tensor(t) => t.clone(),
+            LazyTensor::Map { input, func } => {
+                let new_tensor = Self::eval(input.to_owned());
+                Tensor::new(
+                    new_tensor.layout.clone(),
+                    func.call(&new_tensor.layout, &new_tensor.storage),
+                )
+            }
+            LazyTensor::Reduce { input, dim, func } => {
+                let new_tensor = Self::eval(input.to_owned());
+                Tensor::new(
+                    new_tensor.layout.clone(),
+                    func.call(&new_tensor.layout, &new_tensor.storage, *dim),
+                )
+            }
+        }
+    }
+}

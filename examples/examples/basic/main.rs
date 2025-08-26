@@ -1,5 +1,5 @@
 use core::{
-    Layout, Tensor,
+    Layout,
     backends::{
         Backend, CpuBackend,
         core_ops::{Map, Reduce},
@@ -7,6 +7,7 @@ use core::{
         reduce::{ReduceFunc, Sum},
     },
     storage::{Storage, cpu::CpuStorage},
+    tensor::Tensor,
 };
 
 fn run<S, B>(tensor: Tensor<S>) -> Tensor<S>

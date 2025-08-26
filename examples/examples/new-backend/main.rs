@@ -1,7 +1,7 @@
 use macros::BackendOps;
 
 use core::{
-    Layout, Tensor,
+    Layout,
     backends::{
         Backend,
         core_ops::Map,
@@ -12,13 +12,34 @@ use core::{
         Storage,
         cpu::{CpuDtype, CpuStorage},
     },
+    tensor::{LazyTensor, Tensor},
 };
 
 #[derive(BackendOps)]
 #[backend_ops(ops = ["Map"])]
 struct MyNewBackend {}
 
-impl Backend for MyNewBackend {}
+impl Backend for MyNewBackend {
+    fn eval<S: Storage>(tensor: &LazyTensor<S>) -> Tensor<S> {
+        match tensor {
+            LazyTensor::Tensor(t) => t.clone(),
+            LazyTensor::Map { input, func } => {
+                let new_tensor = Self::eval(input.to_owned());
+                Tensor::new(
+                    new_tensor.layout.clone(),
+                    func.call(&new_tensor.layout, &new_tensor.storage),
+                )
+            }
+            LazyTensor::Reduce { input, dim, func } => {
+                let new_tensor = Self::eval(input.to_owned());
+                Tensor::new(
+                    new_tensor.layout.clone(),
+                    func.call(&new_tensor.layout, &new_tensor.storage, *dim),
+                )
+            }
+        }
+    }
+}
 
 pub struct MyNewBackendRelu;
 
