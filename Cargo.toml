@@ -1,2 +1,8 @@
 [workspace]
-members = [ "backends","core", "examples", "macros", "storage"]
+members = ["backends", "core", "examples", "macros", "storage", "tests"]
+resolver = "2"
+
+[workspace.package]
+name = "candle-wax"
+version = "0.1.0"
+edition = "2024"
