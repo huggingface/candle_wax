@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::backends::op_traits::{map::MapFunc, reduce::ReduceFunc};
 use crate::storage::Storage;
 use crate::tensor::Tensor;
-use crate::backends::op_traits::{map::MapFunc, reduce::ReduceFunc};
 
 pub enum LazyTensor<S: Storage> {
     Tensor(Arc<Tensor<S>>),
