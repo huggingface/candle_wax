@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 pub trait Relu {
     type Relu: Default;
 
-    fn boxed() -> Box<Self::Relu> {
-        Box::new(Self::Relu::default())
+    fn as_arc() -> Arc<Self::Relu> {
+        Arc::new(Self::Relu::default())
     }
 }

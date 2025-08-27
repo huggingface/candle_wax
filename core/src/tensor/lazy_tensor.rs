@@ -8,12 +8,12 @@ pub enum LazyTensor<S: Storage> {
     Tensor(Arc<Tensor<S>>),
     Map {
         input: Box<LazyTensor<S>>,
-        func: Box<dyn MapFunc<S, S, S::Inner, S::Inner>>,
+        func: Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>,
     },
     Reduce {
         input: Box<LazyTensor<S>>,
         dim: i32,
-        func: Box<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
+        func: Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
     },
 }
 
@@ -24,7 +24,7 @@ impl<S: Storage> From<Tensor<S>> for LazyTensor<S> {
 }
 
 impl<S: Storage> LazyTensor<S> {
-    pub fn map(self, f: Box<dyn MapFunc<S, S, S::Inner, S::Inner>>) -> LazyTensor<S> {
+    pub fn map(self, f: Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>) -> LazyTensor<S> {
         LazyTensor::Map {
             input: Box::new(self),
             func: f,
@@ -34,7 +34,7 @@ impl<S: Storage> LazyTensor<S> {
     pub fn reduce(
         self,
         dim: i32,
-        f: Box<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
+        f: Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
     ) -> LazyTensor<S> {
         LazyTensor::Reduce {
             input: Box::new(self),
