@@ -4,6 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-macros = { path = "../macros" }
-core = { path = "../core" }
-storage = {path = "../storage"}
+macros = { workspace = true }
+core = { workspace = true }
+storage = { workspace = true }
