@@ -47,8 +47,8 @@ mod tests {
         );
 
         let tensor = LazyTensor::from(tensor);
-        let tensor = tensor.reduce(2, Box::new(<CpuBackend as Sum>::Sum::default()));
-        let tensor = tensor.map(Box::new(<CpuBackend as Relu>::Relu::default()));
+        let tensor = tensor.reduce(2, <CpuBackend as Sum>::boxed());
+        let tensor = tensor.map(<CpuBackend as Relu>::boxed());
         let result = CpuBackend::eval(tensor);
         assert_eq!(result.storage.data, vec![3.0, 0.0, 11.0, 0.0]);
     }
