@@ -3,18 +3,26 @@
 version = 4
 
 [[package]]
-name = "core"
+name = "backends"
 version = "0.1.0"
 dependencies = [
+ "core",
  "macros",
+ "storage",
 ]
+
+[[package]]
+name = "core"
+version = "0.1.0"
 
 [[package]]
 name = "examples"
 version = "0.1.0"
 dependencies = [
+ "backends",
  "core",
  "macros",
+ "storage",
 ]
 
 [[package]]
@@ -42,6 +50,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "storage"
+version = "0.1.0"
+dependencies = [
+ "core",
 ]
 
 [[package]]

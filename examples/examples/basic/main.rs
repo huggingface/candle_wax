@@ -1,14 +1,16 @@
+use backends::cpu::CpuBackend;
 use core::{
     Layout,
     backends::{
-        Backend, CpuBackend,
-        core_ops::{Map, Reduce},
-        map::{MapFunc, Relu},
-        reduce::{ReduceFunc, Sum},
+        Backend,
+        map::{Map, MapFunc},
+        ops::{Relu, Sum},
+        reduce::{Reduce, ReduceFunc},
     },
-    storage::{Storage, cpu::CpuStorage},
+    storage::Storage,
     tensor::Tensor,
 };
+use storage::cpu::CpuStorage;
 
 fn run<S, B>(tensor: Tensor<S>) -> Tensor<S>
 where

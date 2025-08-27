@@ -4,8 +4,8 @@ use core::{
     Layout,
     backends::{
         Backend,
-        core_ops::Map,
-        map::{MapFunc, Relu},
+        map::{Map, MapFunc},
+        ops::Relu,
     },
     numeric::Zero,
     storage::Storage,

@@ -4,16 +4,14 @@ use core::{
     Layout,
     backends::{
         Backend,
-        core_ops::Map,
-        map::{MapFunc, Relu},
+        map::{Map, MapFunc},
+        ops::Relu,
     },
     numeric::Zero,
-    storage::{
-        Storage,
-        cpu::{CpuDtype, CpuStorage},
-    },
+    storage::Storage,
     tensor::{LazyTensor, Tensor},
 };
+use storage::cpu::{CpuDtype, CpuStorage};
 
 #[derive(BackendOps)]
 #[backend_ops(ops = ["Map"])]

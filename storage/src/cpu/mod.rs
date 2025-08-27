@@ -1,5 +1,5 @@
-pub(crate) mod dtype;
+mod dtype;
 pub use dtype::CpuDtype;
 
-pub(crate) mod storage;
+mod storage;
 pub use storage::CpuStorage;

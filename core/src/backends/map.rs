@@ -1,7 +1,5 @@
 use crate::{backends::Backend, layout::Layout, storage::Storage};
 
-pub mod relu;
-
 pub trait Map<B, S, T, U, V, F>
 where
     B: Backend,

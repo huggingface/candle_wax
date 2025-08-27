@@ -1,5 +1,5 @@
 use crate::backends::Backend;
-use crate::backends::op_traits::{
+use crate::backends::{
     map::{Map, MapFunc},
     reduce::{Reduce, ReduceFunc},
 };

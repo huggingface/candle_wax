@@ -1,4 +1,4 @@
-use crate::storage::Storage;
+use core::storage::Storage;
 
 use super::dtype::CpuDtype;
 

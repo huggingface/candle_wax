@@ -1,13 +1,14 @@
-use macros::BackendOps;
-
-use crate::backends::Backend;
-use crate::backends::op_traits::{
-    map::{Map, MapFunc},
-    reduce::{Reduce, ReduceFunc},
+use core::{
+    Layout,
+    backends::{
+        Backend,
+        map::{Map, MapFunc},
+        reduce::{Reduce, ReduceFunc},
+    },
+    storage::Storage,
+    tensor::{LazyTensor, Tensor},
 };
-use crate::layout::Layout;
-use crate::storage::Storage;
-use crate::tensor::{LazyTensor, Tensor};
+use macros::BackendOps;
 
 #[derive(BackendOps)]
 pub struct CpuBackend {}

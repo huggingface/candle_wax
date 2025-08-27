@@ -1,5 +1,5 @@
 [package]
-name = "examples"
+name = "backends"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +7,3 @@ edition = "2024"
 macros = { path = "../macros" }
 core = { path = "../core" }
 storage = {path = "../storage"}
-backends = { path = "../backends" }
