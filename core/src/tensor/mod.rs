@@ -6,6 +6,9 @@ use crate::backends::op_traits::{
 use crate::layout::Layout;
 use crate::storage::Storage;
 
+mod lazy_tensor;
+pub use lazy_tensor::LazyTensor;
+
 #[derive(Clone)]
 pub struct Tensor<S: Storage> {
     pub layout: Layout,
@@ -40,42 +43,3 @@ impl<S: Storage> Tensor<S> {
     }
 }
 
-pub enum LazyTensor<S: Storage> {
-    Tensor(Tensor<S>),
-    Map {
-        input: Box<LazyTensor<S>>,
-        func: Box<dyn MapFunc<S, S, S::Inner, S::Inner>>,
-    },
-    Reduce {
-        input: Box<LazyTensor<S>>,
-        dim: i32,
-        func: Box<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
-    },
-}
-
-impl<S: Storage> From<Tensor<S>> for LazyTensor<S> {
-    fn from(tensor: Tensor<S>) -> Self {
-        LazyTensor::Tensor(tensor)
-    }
-}
-
-impl<S: Storage> LazyTensor<S> {
-    pub fn map(self, f: Box<dyn MapFunc<S, S, S::Inner, S::Inner>>) -> LazyTensor<S> {
-        LazyTensor::Map {
-            input: Box::new(self),
-            func: f,
-        }
-    }
-
-    pub fn reduce(
-        self,
-        dim: i32,
-        f: Box<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
-    ) -> LazyTensor<S> {
-        LazyTensor::Reduce {
-            input: Box::new(self),
-            dim,
-            func: f,
-        }
-    }
-}
