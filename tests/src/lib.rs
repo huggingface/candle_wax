@@ -4,8 +4,8 @@ mod tests {
     use core::{
         Layout,
         backends::{
-            Backend,
-            ops::{Relu, Sum},
+            LazyBackend,
+            ops::{Multiply, Relu, Sum},
         },
         tensor::{LazyTensor, Tensor},
     };
@@ -35,6 +35,33 @@ mod tests {
 
         let result = tensor.reduce::<CpuBackend, _, _>(2, <CpuBackend as Sum>::Sum::default());
         assert_eq!(result.storage.data, vec![3.0, 7.0, 11.0, 15.0]);
+    }
+
+    #[test]
+    fn test_matmul_2d_basic() {
+        let tensor_a = Tensor::new(
+            Layout::new(vec![2, 3]),
+            CpuStorage {
+                data: vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0],
+            },
+        );
+
+        let tensor_b = Tensor::new(
+            Layout::new(vec![3, 2]),
+            CpuStorage {
+                data: vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0],
+            },
+        );
+
+        let multiplied = tensor_a.broadcast::<CpuBackend, _, _, _>(
+            &tensor_b,
+            &[(1, 0)],
+            <CpuBackend as Multiply>::Multiply::default(),
+        );
+        let result = multiplied.reduce::<CpuBackend, _, _>(1, <CpuBackend as Sum>::Sum::default());
+
+        assert_eq!(result.layout.shape, &[2, 2]);
+        assert_eq!(result.storage.data, vec![22.0, 28.0, 49.0, 64.0]);
     }
 
     #[test]

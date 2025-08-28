@@ -7,7 +7,7 @@ where
     T: Storage<Inner = V>,
     F: ReduceFunc<S, T, U, V>,
 {
-    fn reduce(layout: &Layout, tensor: &S, dim: i32, f: F) -> T;
+    fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T;
 }
 
 pub trait ReduceFunc<S, T, U, V>

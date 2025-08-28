@@ -1,5 +1,6 @@
 use crate::backends::Backend;
 use crate::backends::{
+    broadcast::{Broadcast, BroadcastFunc},
     map::{Map, MapFunc},
     reduce::{Reduce, ReduceFunc},
 };
@@ -39,6 +40,38 @@ impl<S: Storage> Tensor<S> {
             self.layout
                 .reduce(self.layout.signed_dim_to_unsigned_dim(dim)),
             f.call(&self.layout, &self.storage, dim),
+        )
+    }
+
+    pub fn broadcast<B, F, R, T>(
+        self,
+        other: &Tensor<R>,
+        corresponding_dimensions: &[(i32, i32)],
+        f: F,
+    ) -> Tensor<T>
+    where
+        R: Storage,
+        T: Storage,
+        F: BroadcastFunc<S, R, T, S::Inner, R::Inner, T::Inner>,
+        B: Backend + Broadcast<B, S, R, T, S::Inner, R::Inner, T::Inner, F>,
+    {
+        Tensor::new(
+            self.layout.broadcast(
+                &other.layout,
+                &self
+                    .layout
+                    .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
+                        &other.layout,
+                        corresponding_dimensions,
+                    ),
+            ),
+            f.call(
+                &self.layout,
+                &self.storage,
+                &other.layout,
+                &other.storage,
+                corresponding_dimensions,
+            ),
         )
     }
 }

@@ -4,7 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 use core::{
     Layout,
     backends::{
-        Backend,
+        Backend, LazyBackend,
+        broadcast::{Broadcast, BroadcastFunc},
         map::{Map, MapFunc},
         reduce::{Reduce, ReduceFunc},
     },
@@ -16,7 +17,9 @@ use macros::BackendOps;
 #[derive(BackendOps)]
 pub struct CpuBackend {}
 
-impl Backend for CpuBackend {
+impl Backend for CpuBackend {}
+
+impl LazyBackend for CpuBackend {
     fn eval<S: Storage>(tensor: LazyTensor<S>) -> Tensor<S> {
         let mut context = CpuBackendContext::from(tensor);
 
@@ -321,6 +324,14 @@ impl<S: Storage> From<LazyTensor<S>> for CpuBackendContext<S> {
                 ]));
                 context.eval_id = Some(id);
                 context
+            }
+            LazyTensor::Broadcast {
+                lhs_input: _,
+                rhs_input: _,
+                corresponding_dimensions: _,
+                func: _,
+            } => {
+                panic!("Broadcast operation not yet implemented in CpuBackendContext")
             }
         }
     }

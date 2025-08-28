@@ -58,15 +58,15 @@ impl Layout {
     pub fn unravel_index(&self, index: usize) -> Vec<usize> {
         let mut indices = vec![0; self.shape.len()];
         let mut remaining = index - self.offset;
-        
+
         let mut stride_order: Vec<usize> = (0..self.strides.len()).collect();
         stride_order.sort_by_key(|&i| std::cmp::Reverse(self.strides[i]));
-        
+
         for &dim in stride_order.iter() {
             indices[dim] = remaining / self.strides[dim];
             remaining %= self.strides[dim];
         }
-        
+
         indices
     }
 
@@ -169,12 +169,12 @@ mod tests {
     #[test]
     fn test_ravel_index() {
         let layout = Layout::new(vec![2, 3, 4]);
-        
+
         assert_eq!(layout.ravel_index(&[0, 0, 0]), 0);
         assert_eq!(layout.ravel_index(&[1, 2, 3]), 23);
         assert_eq!(layout.ravel_index(&[0, 1, 2]), 6);
         assert_eq!(layout.ravel_index(&[1, 0, 0]), 12);
-        
+
         let layout_1d = Layout::new(vec![5]);
         assert_eq!(layout_1d.ravel_index(&[3]), 3);
     }
@@ -189,12 +189,12 @@ mod tests {
     #[test]
     fn test_unravel_index() {
         let layout = Layout::new(vec![2, 3, 4]);
-        
+
         assert_eq!(layout.unravel_index(0), vec![0, 0, 0]);
         assert_eq!(layout.unravel_index(23), vec![1, 2, 3]);
         assert_eq!(layout.unravel_index(6), vec![0, 1, 2]);
         assert_eq!(layout.unravel_index(12), vec![1, 0, 0]);
-        
+
         let layout_1d = Layout::new(vec![5]);
         assert_eq!(layout_1d.unravel_index(3), vec![3]);
     }
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn test_ravel_unravel_roundtrip() {
         let layout = Layout::new(vec![3, 4, 5]);
-        
+
         for i in 0..layout.count_elements() {
             let indices = layout.unravel_index(i);
             let back_to_index = layout.ravel_index(&indices);
@@ -214,26 +214,34 @@ mod tests {
     fn test_ravel_unravel_roundtrip_with_offset() {
         let mut layout = Layout::new(vec![3, 4, 5]);
         layout.offset = 10;
-        
+
         for i in layout.offset..(layout.offset + layout.count_elements()) {
             let indices = layout.unravel_index(i);
             let back_to_index = layout.ravel_index(&indices);
-            assert_eq!(i, back_to_index, "Failed roundtrip for index {} with offset {}", i, layout.offset);
+            assert_eq!(
+                i, back_to_index,
+                "Failed roundtrip for index {} with offset {}",
+                i, layout.offset
+            );
         }
     }
 
     #[test]
     fn test_ravel_unravel_roundtrip_different_offsets() {
         let offsets = vec![0, 5, 17, 100];
-        
+
         for offset in offsets {
             let mut layout = Layout::new(vec![2, 3, 4]);
             layout.offset = offset;
-            
+
             for i in layout.offset..(layout.offset + layout.count_elements()) {
                 let indices = layout.unravel_index(i);
                 let back_to_index = layout.ravel_index(&indices);
-                assert_eq!(i, back_to_index, "Failed roundtrip for index {} with offset {}", i, offset);
+                assert_eq!(
+                    i, back_to_index,
+                    "Failed roundtrip for index {} with offset {}",
+                    i, offset
+                );
             }
         }
     }
@@ -246,13 +254,11 @@ mod tests {
                 strides: vec![1, 3],
                 offset: 0,
             },
-
             Layout {
                 shape: vec![2, 3],
                 strides: vec![10, 2],
                 offset: 0,
             },
-
             Layout {
                 shape: vec![2, 2, 2],
                 strides: vec![8, 2, 1],
@@ -263,13 +269,15 @@ mod tests {
         for (test_idx, layout) in test_cases.iter().enumerate() {
             let mut indices_combinations = Vec::new();
             generate_all_indices(&layout.shape, &mut vec![], &mut indices_combinations);
-            
+
             for indices in indices_combinations {
                 let flat_index = layout.ravel_index(&indices);
                 let back_to_indices = layout.unravel_index(flat_index);
-                assert_eq!(indices, back_to_indices, 
-                    "Failed roundtrip for test case {} with indices {:?}, flat_index {}, layout {:?}", 
-                    test_idx, indices, flat_index, layout);
+                assert_eq!(
+                    indices, back_to_indices,
+                    "Failed roundtrip for test case {} with indices {:?}, flat_index {}, layout {:?}",
+                    test_idx, indices, flat_index, layout
+                );
             }
         }
     }
@@ -281,13 +289,13 @@ mod tests {
             strides: vec![3],
             offset: 7,
         };
-        
+
         for i in 0..layout.shape[0] {
             let indices = vec![i];
             let flat_index = layout.ravel_index(&indices);
             let expected_flat_index = layout.offset + i * layout.strides[0];
             assert_eq!(flat_index, expected_flat_index);
-            
+
             let back_to_indices = layout.unravel_index(flat_index);
             assert_eq!(indices, back_to_indices);
         }
@@ -297,7 +305,7 @@ mod tests {
     fn test_ravel_unravel_roundtrip_large_offset() {
         let mut layout = Layout::new(vec![2, 3]);
         layout.offset = 1000000;
-        
+
         for i in layout.offset..(layout.offset + layout.count_elements()) {
             let indices = layout.unravel_index(i);
             let back_to_index = layout.ravel_index(&indices);
@@ -308,15 +316,15 @@ mod tests {
     #[test]
     fn test_reduce() {
         let layout = Layout::new(vec![2, 3, 4]);
-        
+
         let reduced_0 = layout.reduce(0);
         assert_eq!(reduced_0.shape, vec![3, 4]);
         assert_eq!(reduced_0.strides, vec![4, 1]);
-        
+
         let reduced_1 = layout.reduce(1);
         assert_eq!(reduced_1.shape, vec![2, 4]);
         assert_eq!(reduced_1.strides, vec![4, 1]);
-        
+
         let reduced_2 = layout.reduce(2);
         assert_eq!(reduced_2.shape, vec![2, 3]);
         assert_eq!(reduced_2.strides, vec![3, 1]);
@@ -332,11 +340,11 @@ mod tests {
     #[test]
     fn test_signed_dim_to_unsigned_dim() {
         let layout = Layout::new(vec![2, 3, 4]);
-        
+
         assert_eq!(layout.signed_dim_to_unsigned_dim(0), 0);
         assert_eq!(layout.signed_dim_to_unsigned_dim(1), 1);
         assert_eq!(layout.signed_dim_to_unsigned_dim(2), 2);
-        
+
         assert_eq!(layout.signed_dim_to_unsigned_dim(-1), 2);
         assert_eq!(layout.signed_dim_to_unsigned_dim(-2), 1);
         assert_eq!(layout.signed_dim_to_unsigned_dim(-3), 0);
@@ -360,10 +368,10 @@ mod tests {
     fn test_broadcast_compatible() {
         let layout1 = Layout::new(vec![2, 3]);
         let layout2 = Layout::new(vec![3, 4]);
-        
+
         let corresponding_dims = vec![(1, 0)];
         let broadcasted = layout1.broadcast(&layout2, &corresponding_dims);
-        
+
         assert_eq!(broadcasted.shape, vec![2, 3, 4]);
     }
 
@@ -371,10 +379,10 @@ mod tests {
     fn test_broadcast_with_size_1() {
         let layout1 = Layout::new(vec![2, 1]);
         let layout2 = Layout::new(vec![3, 4]);
-        
+
         let corresponding_dims = vec![(1, 0)];
         let broadcasted = layout1.broadcast(&layout2, &corresponding_dims);
-        
+
         assert_eq!(broadcasted.shape, vec![2, 1, 4]);
     }
 
@@ -383,7 +391,7 @@ mod tests {
     fn test_broadcast_incompatible() {
         let layout1 = Layout::new(vec![2, 3]);
         let layout2 = Layout::new(vec![4, 5]);
-        
+
         let corresponding_dims = vec![(1, 0)];
         layout1.broadcast(&layout2, &corresponding_dims);
     }
@@ -393,7 +401,7 @@ mod tests {
     fn test_broadcast_duplicate_dimensions() {
         let layout1 = Layout::new(vec![2, 3]);
         let layout2 = Layout::new(vec![3, 4]);
-        
+
         let corresponding_dims = vec![(0, 0), (0, 1)];
         layout1.broadcast(&layout2, &corresponding_dims);
     }
@@ -402,10 +410,10 @@ mod tests {
     fn test_broadcast_no_corresponding_dimensions() {
         let layout1 = Layout::new(vec![2, 3]);
         let layout2 = Layout::new(vec![4, 5]);
-        
+
         let corresponding_dims = vec![];
         let broadcasted = layout1.broadcast(&layout2, &corresponding_dims);
-        
+
         assert_eq!(broadcasted.shape, vec![2, 3, 4, 5]);
     }
 
@@ -413,13 +421,14 @@ mod tests {
     fn test_signed_corresponding_dimensions_to_unsigned_corresponding_dimensions() {
         let layout1 = Layout::new(vec![2, 3, 4]);
         let layout2 = Layout::new(vec![4, 5]);
-        
+
         let signed_dims = vec![(0, 0), (-1, -1)];
-        let unsigned_dims = layout1.signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
-            &layout2, 
-            &signed_dims
-        );
-        
+        let unsigned_dims = layout1
+            .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
+                &layout2,
+                &signed_dims,
+            );
+
         assert_eq!(unsigned_dims, vec![(0, 0), (2, 1)]);
     }
 
@@ -427,13 +436,14 @@ mod tests {
     fn test_signed_corresponding_dimensions_mixed_signs() {
         let layout1 = Layout::new(vec![2, 3, 4]);
         let layout2 = Layout::new(vec![4, 5]);
-        
+
         let signed_dims = vec![(1, -2), (-2, 0)];
-        let unsigned_dims = layout1.signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
-            &layout2, 
-            &signed_dims
-        );
-        
+        let unsigned_dims = layout1
+            .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
+                &layout2,
+                &signed_dims,
+            );
+
         assert_eq!(unsigned_dims, vec![(1, 0), (1, 0)]);
     }
 
@@ -441,10 +451,10 @@ mod tests {
     fn test_layout_with_offset() {
         let mut layout = Layout::new(vec![2, 3]);
         layout.offset = 5;
-        
+
         assert_eq!(layout.ravel_index(&[0, 0]), 5);
         assert_eq!(layout.ravel_index(&[1, 2]), 10);
-        
+
         assert_eq!(layout.unravel_index(5), vec![0, 0]);
         assert_eq!(layout.unravel_index(10), vec![1, 2]);
     }
@@ -457,19 +467,27 @@ mod tests {
             (vec![2, 3, 4], vec![12, 4, 1]),
             (vec![5, 1, 3, 2], vec![6, 6, 2, 1]),
         ];
-        
+
         for (shape, expected_strides) in test_cases {
             let layout = Layout::new(shape.clone());
-            assert_eq!(layout.strides, expected_strides, "Failed for shape {:?}", shape);
+            assert_eq!(
+                layout.strides, expected_strides,
+                "Failed for shape {:?}",
+                shape
+            );
         }
     }
 
-    fn generate_all_indices(shape: &[usize], current: &mut Vec<usize>, result: &mut Vec<Vec<usize>>) {
+    fn generate_all_indices(
+        shape: &[usize],
+        current: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+    ) {
         if current.len() == shape.len() {
             result.push(current.clone());
             return;
         }
-        
+
         let dim = current.len();
         for i in 0..shape[dim] {
             current.push(i);

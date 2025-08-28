@@ -13,11 +13,9 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
 {
     fn call(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {
         let udim = layout.signed_dim_to_unsigned_dim(dim);
+        let output_layout = layout.reduce(udim);
 
-        let mut output_shape = layout.shape.clone();
-        output_shape.remove(udim);
-
-        if output_shape.is_empty() {
+        if output_layout.is_scalar() {
             let total_sum = storage
                 .data
                 .iter()
@@ -27,8 +25,7 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
             };
         }
 
-        let output_layout = Layout::new(output_shape);
-        let output_size = output_layout.shape.iter().product::<usize>();
+        let output_size = output_layout.count_elements();
         let mut output_data = vec![U::zero(); output_size];
 
         for (output_idx, output_elem) in output_data.iter_mut().enumerate().take(output_size) {

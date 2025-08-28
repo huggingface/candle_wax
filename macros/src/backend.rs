@@ -21,7 +21,11 @@ pub fn parse_ops_attribute(attrs: &[Attribute]) -> Vec<String> {
     }
 
     // Default: all known operations
-    vec!["Map".to_string(), "Reduce".to_string()]
+    vec![
+        "Map".to_string(),
+        "Reduce".to_string(),
+        "Broadcast".to_string(),
+    ]
 }
 
 fn parse_string_array(array: &ExprArray) -> Vec<String> {
@@ -46,37 +50,47 @@ pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2
     let op_ident = format_ident!("{}", op_type);
     let op_func_ident = format_ident!("{}Func", op_type);
 
-    let (method_signature, method_call) = match op_type {
-        "Map" => (
-            quote! {
-                fn map(layout: &Layout, storage: &S, f: F) -> T
-            },
-            quote! {
-                f.call(&layout, &storage)
-            },
-        ),
-        "Reduce" => (
-            quote! {
-                fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T
-            },
-            quote! {
-                f.call(&layout, &storage, dim)
-            },
-        ),
-        _ => panic!("Unknown operation type: {}", op_type),
-    };
-
-    quote! {
-        impl<B, S, T, U, V, F> #op_ident<B, S, T, U, V, F> for #backend_name
-        where
-            B: Backend,
-            S: Storage<Inner = U>,
-            T: Storage<Inner = V>,
-            F: #op_func_ident<S, T, U, V>,
-        {
-            #method_signature {
-                #method_call
+    match op_type {
+        "Map" => quote! {
+            impl<B, S, T, U, V, F> #op_ident<B, S, T, U, V, F> for #backend_name
+            where
+                B: Backend,
+                S: Storage<Inner = U>,
+                T: Storage<Inner = V>,
+                F: #op_func_ident<S, T, U, V>,
+            {
+                fn map(layout: &Layout, storage: &S, f: F) -> T {
+                    f.call(&layout, &storage)
+                }
             }
-        }
+        },
+        "Reduce" => quote! {
+            impl<B, S, T, U, V, F> #op_ident<B, S, T, U, V, F> for #backend_name
+            where
+                B: Backend,
+                S: Storage<Inner = U>,
+                T: Storage<Inner = V>,
+                F: #op_func_ident<S, T, U, V>,
+            {
+                fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T {
+                    f.call(&layout, &storage, dim)
+                }
+            }
+        },
+        "Broadcast" => quote! {
+            impl<B, R, S, T, U, V, W, F> #op_ident<B, R, S, T, U, V, W, F> for #backend_name
+            where
+                B: Backend,
+                R: Storage<Inner = U>,
+                S: Storage<Inner = V>,
+                T: Storage<Inner = W>,
+                F: #op_func_ident<R, S, T, U, V, W>,
+            {
+                fn broadcast(lhs_layout: &Layout, lhs_storage: &R, rhs_layout: &Layout, rhs_storage: &S, corresponding_dims: &[(i32, i32)], f: F) -> T{
+                    f.call(lhs_layout, lhs_storage, rhs_layout, rhs_storage, corresponding_dims)
+                }
+            }
+        },
+        _ => panic!("Unknown operation type: {}", op_type),
     }
 }

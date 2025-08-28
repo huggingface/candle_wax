@@ -3,7 +3,7 @@ use macros::BackendOps;
 use core::{
     Layout,
     backends::{
-        Backend,
+        Backend, LazyBackend,
         map::{Map, MapFunc},
         ops::Relu,
     },
@@ -29,7 +29,9 @@ impl<T: MyNewDtype> Storage for MyNewStorage<T> {
 #[backend_ops(ops = ["Map"])]
 struct MyNewBackend {}
 
-impl Backend for MyNewBackend {
+impl Backend for MyNewBackend {}
+
+impl LazyBackend for MyNewBackend {
     fn eval<S: Storage>(tensor: LazyTensor<S>) -> Tensor<S> {
         match tensor {
             LazyTensor::Tensor(t) => t.as_ref().clone(),
@@ -47,6 +49,7 @@ impl Backend for MyNewBackend {
                     func.call(&new_tensor.layout, &new_tensor.storage, dim),
                 )
             }
+            _ => panic!("Unsupported operation in MyNewBackend"),
         }
     }
 }
