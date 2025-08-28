@@ -16,4 +16,6 @@ where
     T: Storage<Inner = V>,
 {
     fn call(&self, layout: &Layout, storage: &S) -> T;
+
+    fn as_str(&self) -> String;
 }

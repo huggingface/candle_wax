@@ -8,7 +8,7 @@ use storage::cpu::{CpuDtype, CpuStorage};
 
 pub struct CpuRelu;
 
-impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
+impl<U: CpuDtype + Zero + std::cmp::PartialOrd + > MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for CpuRelu
 {
     fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
@@ -21,6 +21,10 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorag
         CpuStorage {
             data: transformed_data,
         }
+    }
+
+    fn as_str(&self) -> String {
+        "Relu".to_string()
     }
 }
 

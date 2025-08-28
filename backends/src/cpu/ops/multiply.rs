@@ -26,6 +26,7 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
                 lhs_layout,
                 &corresponding_dims,
             );
+
         let output_layout = lhs_layout.broadcast(rhs_layout, &ucorresponding_dims);
 
         let output_size = output_layout.count_elements();
@@ -102,6 +103,10 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
         }
 
         CpuStorage { data: output_data }
+    }
+
+    fn as_str(&self) -> String {
+       "Multiply".to_string()
     }
 }
 

@@ -31,4 +31,6 @@ where
         rhs_storage: &S,
         corresponding_dims: &[(i32, i32)],
     ) -> T;
+
+    fn as_str(&self) -> String;
 }

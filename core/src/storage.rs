@@ -1,3 +1,3 @@
-pub trait Storage: Clone {
+pub trait Storage: Clone +  {
     type Inner;
 }
