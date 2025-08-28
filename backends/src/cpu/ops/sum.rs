@@ -8,7 +8,7 @@ use storage::cpu::{CpuDtype, CpuStorage};
 
 pub struct CpuSum;
 
-impl<U: CpuDtype + Zero + std::ops::Add<Output = U> + > ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U>
+impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for CpuSum
 {
     fn call(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {

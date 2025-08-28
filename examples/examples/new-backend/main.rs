@@ -60,7 +60,11 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorag
     }
 
     fn as_str(&self) -> String {
-        format!("MyNewBackendRelu(CpuStorage<{}> -> CpuStorage<{}>)", std::any::type_name::<U>(), std::any::type_name::<U>())
+        format!(
+            "MyNewBackendRelu(CpuStorage<{}> -> CpuStorage<{}>)",
+            std::any::type_name::<U>(),
+            std::any::type_name::<U>()
+        )
     }
 }
 

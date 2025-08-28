@@ -1,4 +1,6 @@
-use egg::{define_language, rewrite, CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst};
+use egg::{
+    CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst, define_language, rewrite,
+};
 use std::{collections::HashMap, sync::Arc, usize};
 
 use core::{
@@ -37,14 +39,19 @@ impl LazyBackend for CpuBackend {
     }
 }
 
-fn is_matmul(f1: &'static str, f2: &'static str) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
+fn is_matmul(
+    f1: &'static str,
+    f2: &'static str,
+) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
     let var1 = f1.parse().unwrap();
     let var2 = f2.parse().unwrap();
 
     let mul = CpuBackendLanguage::BroadcastFunc("Multiply".to_string());
     let sum = CpuBackendLanguage::ReduceFunc("Sum".to_string());
 
-    move |egraph, _, subst| egraph[subst[var1]].nodes.contains(&mul) && egraph[subst[var2]].nodes.contains(&sum)
+    move |egraph, _, subst| {
+        egraph[subst[var1]].nodes.contains(&mul) && egraph[subst[var2]].nodes.contains(&sum)
+    }
 }
 
 define_language! {
@@ -71,7 +78,8 @@ pub struct CpuBackendContext<S: Storage> {
     pub tensors: HashMap<usize, Arc<Tensor<S>>>,
     pub map_funcs: HashMap<String, Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>>,
     pub reduce_funcs: HashMap<String, Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>>,
-    pub broadcast_funcs: HashMap<String, Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>>,
+    pub broadcast_funcs:
+        HashMap<String, Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>>,
     pub corresponding_dims: HashMap<usize, Vec<(i32, i32)>>,
     pub egraph: egg::EGraph<CpuBackendLanguage, ()>,
     pub eval_id: Option<Id>,
@@ -115,7 +123,6 @@ impl<S: Storage> CpuBackendContext<S> {
         unique_id
     }
 
-
     pub fn combine(&mut self, other: CpuBackendContext<S>) -> HashMap<Id, Id> {
         // Merge all the hash maps
         self.tensors.extend(other.tensors);
@@ -126,27 +133,27 @@ impl<S: Storage> CpuBackendContext<S> {
 
         // For e-graph merging, we need to rebuild the other e-graph's expressions
         // in our e-graph context. This is more complex than simple ID mapping.
-        
+
         // Create a mapping from other's class IDs to our class IDs
         let mut id_mapping = HashMap::new();
-        
+
         // We need to process nodes in topological order to ensure dependencies are met
         // For simplicity, we'll use a worklist approach
         let mut worklist: Vec<Id> = other.egraph.classes().map(|class| class.id).collect();
         let mut processed = std::collections::HashSet::new();
-        
+
         while !worklist.is_empty() {
             let mut progress = false;
             let mut remaining = Vec::new();
-            
+
             for &class_id in &worklist {
                 if processed.contains(&class_id) {
                     continue;
                 }
-                
+
                 let class = &other.egraph[class_id];
                 let mut can_process = true;
-                
+
                 // Check if all children of all nodes in this class have been processed
                 for node in &class.nodes {
                     for &child_id in node.children() {
@@ -159,22 +166,22 @@ impl<S: Storage> CpuBackendContext<S> {
                         break;
                     }
                 }
-                
+
                 if can_process {
                     // Process this class
                     let representative_node = &class.nodes[0]; // Take first node as representative
-                    
+
                     // Map children to our ID space
                     let mapped_node = representative_node.clone().map_children(|child_id| {
                         id_mapping.get(&child_id).copied().unwrap_or(child_id)
                     });
-                    
+
                     // Add to our e-graph
                     let new_id = self.egraph.add(mapped_node);
                     id_mapping.insert(class_id, new_id);
                     processed.insert(class_id);
                     progress = true;
-                    
+
                     // Add all other nodes in the class to maintain equivalences
                     for node in &class.nodes[1..] {
                         let mapped_node = node.clone().map_children(|child_id| {
@@ -187,16 +194,16 @@ impl<S: Storage> CpuBackendContext<S> {
                     remaining.push(class_id);
                 }
             }
-            
+
             if !progress && !remaining.is_empty() {
                 // If we can't make progress, there might be cycles or missing dependencies
                 // For now, we'll break to avoid infinite loops
                 break;
             }
-            
+
             worklist = remaining;
         }
-        
+
         // Update eval_id if the other context had one
         if let Some(other_eval_id) = other.eval_id {
             if let Some(&mapped_eval_id) = id_mapping.get(&other_eval_id) {
@@ -335,10 +342,12 @@ impl<S: Storage> CpuBackendContext<S> {
                 Arc::new(Tensor::new(
                     lhs_input.layout.broadcast(
                         &rhs_input.layout,
-                        &lhs_input.layout.signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
-                            &rhs_input.layout,
-                            corrdims,
-                        ),
+                        &lhs_input
+                            .layout
+                            .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
+                                &rhs_input.layout,
+                                corrdims,
+                            ),
                     ),
                     func.call(
                         &lhs_input.layout,
@@ -422,7 +431,7 @@ impl<S: Storage> CpuBackendContext<S> {
                     .corresponding_dims
                     .get(&corrdims_lookup)
                     .expect("Corresponding dimensions not found in context");
-                
+
                 let dim = match &expr[*dim_id] {
                     CpuBackendLanguage::Dim(d) => *d,
                     _ => panic!("Expected dimension"),
@@ -492,7 +501,7 @@ impl<S: Storage> CpuBackendContext<S> {
         lhs: &Arc<Tensor<S>>,
         rhs: &Arc<Tensor<S>>,
         corrdims: &Vec<(i32, i32)>,
-        dim: i32
+        dim: i32,
     ) -> Arc<Tensor<S>> {
         // For matmul, we assume the multiply and sum functions are standard
         let multiply_func = self
@@ -515,17 +524,17 @@ impl<S: Storage> CpuBackendContext<S> {
 
         let broadcasted_layout = lhs.layout.broadcast(
             &rhs.layout,
-            &lhs.layout.signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
-                &rhs.layout,
-                corrdims,
-            ),
+            &lhs.layout
+                .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
+                    &rhs.layout,
+                    corrdims,
+                ),
         );
 
         let reduced_storage = sum_func.call(&broadcasted_layout, &broadcasted, dim);
 
         Arc::new(Tensor::new(
-            broadcasted_layout
-                .reduce(broadcasted_layout.signed_dim_to_unsigned_dim(dim)),
+            broadcasted_layout.reduce(broadcasted_layout.signed_dim_to_unsigned_dim(dim)),
             reduced_storage,
         ))
     }
@@ -592,10 +601,13 @@ impl<S: Storage> From<LazyTensor<S>> for CpuBackendContext<S> {
                 let mapping = context.combine(rhs_context);
                 let rhs_id = *mapping.get(&rhs_id).expect("RHS ID not found in mapping");
                 let func_id = context.add_broadcast_func(func);
-                let reduce_func_id = context.egraph.add(CpuBackendLanguage::BroadcastFunc(func_id));
-                let corrdims_id = context
-                    .add_corresponding_dims(corresponding_dimensions);
-                let corrdim_ids = context.egraph.add(CpuBackendLanguage::CorrespondingDims(corrdims_id));
+                let reduce_func_id = context
+                    .egraph
+                    .add(CpuBackendLanguage::BroadcastFunc(func_id));
+                let corrdims_id = context.add_corresponding_dims(corresponding_dimensions);
+                let corrdim_ids = context
+                    .egraph
+                    .add(CpuBackendLanguage::CorrespondingDims(corrdims_id));
                 let id: Id = context.egraph.add(CpuBackendLanguage::Broadcast([
                     context.eval_id.unwrap(),
                     rhs_id, // Note: This should be the eval_id of rhs_input after combining

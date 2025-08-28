@@ -98,7 +98,7 @@ mod tests {
 
         let tensor_a = LazyTensor::from(tensor_a);
         let tensor_b = LazyTensor::from(tensor_b);
-        let tensor = tensor_a.broadcast(tensor_b, vec![(1,0)], <CpuBackend as Multiply>::as_arc());
+        let tensor = tensor_a.broadcast(tensor_b, vec![(1, 0)], <CpuBackend as Multiply>::as_arc());
         let tensor = tensor.reduce(1, <CpuBackend as Sum>::as_arc());
         let result = CpuBackend::eval(tensor);
 
