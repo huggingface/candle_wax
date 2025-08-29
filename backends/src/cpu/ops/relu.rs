@@ -24,7 +24,11 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorag
     }
 
     fn as_str(&self) -> String {
-        "Relu".to_string()
+        format!(
+            "CpuRelu({} -> {})",
+            std::any::type_name::<CpuStorage<U>>(),
+            std::any::type_name::<CpuStorage<U>>()
+        )
     }
 }
 

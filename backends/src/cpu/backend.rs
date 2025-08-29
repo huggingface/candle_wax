@@ -1,6 +1,7 @@
 use egg::{
     CostFunction, EGraph, Extractor, Id, Rewrite, Runner, Subst, Var, define_language, rewrite,
 };
+use regex::Regex;
 use std::{collections::HashMap, sync::Arc, usize};
 
 use core::{
@@ -60,11 +61,28 @@ define_language! {
 }
 
 fn is_matmul(f1: Var, f2: Var) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
-    let mul = CpuBackendLanguage::BroadcastFunc("Multiply".to_string());
-    let sum = CpuBackendLanguage::ReduceFunc("Sum".to_string());
+    let mul_pattern = Regex::new(r".*Multiply.*").unwrap();
+    let sum_pattern = Regex::new(r".*Sum.*").unwrap();
 
     move |egraph, _, subst| {
-        egraph[subst[f1]].nodes.contains(&mul) && egraph[subst[f2]].nodes.contains(&sum)
+        // Check if any node in the equivalence class matches the patterns
+        let f1_matches = egraph[subst[f1]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::BroadcastFunc(func_name) = node {
+                mul_pattern.is_match(func_name)
+            } else {
+                false
+            }
+        });
+
+        let f2_matches = egraph[subst[f2]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::ReduceFunc(func_name) = node {
+                sum_pattern.is_match(func_name)
+            } else {
+                false
+            }
+        });
+
+        f1_matches && f2_matches
     }
 }
 
@@ -437,11 +455,20 @@ impl<S: Storage> CpuBackendContext<S> {
         // For matmul, we assume the multiply and sum functions are standard
         let multiply_func = self
             .broadcast_funcs
-            .get("Multiply")
+            .get(&format!(
+                "CpuMultiply({}, {} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
             .expect("Multiply function not found in context");
         let sum_func = self
             .reduce_funcs
-            .get("Sum")
+            .get(&format!(
+                "CpuSum({} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
             .expect("Sum function not found in context");
 
         // Perform the broadcast (element-wise multiplication)

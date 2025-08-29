@@ -106,7 +106,12 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
     }
 
     fn as_str(&self) -> String {
-        "Multiply".to_string()
+        format!(
+            "CpuMultiply({}, {} -> {})",
+            std::any::type_name::<CpuStorage<U>>(),
+            std::any::type_name::<CpuStorage<U>>(),
+            std::any::type_name::<CpuStorage<U>>()
+        )
     }
 }
 

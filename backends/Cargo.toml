@@ -8,3 +8,4 @@ egg = { workspace = true }
 macros = { workspace = true }
 core = { workspace = true }
 storage = { workspace = true }
+regex = {workspace = true}
