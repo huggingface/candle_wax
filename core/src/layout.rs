@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_ravel_unravel_roundtrip_custom_strides() {
-        let test_cases = vec![
+        let test_cases = [
             Layout {
                 shape: vec![3, 4],
                 strides: vec![1, 3],

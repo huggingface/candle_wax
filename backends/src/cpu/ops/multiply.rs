@@ -24,7 +24,7 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
         let ucorresponding_dims = rhs_layout
             .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
                 lhs_layout,
-                &corresponding_dims,
+                corresponding_dims,
             );
 
         let output_layout = lhs_layout.broadcast(rhs_layout, &ucorresponding_dims);
@@ -48,28 +48,25 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
             let mut rhs_indices = Vec::new();
 
             // First, handle the lhs dimensions (they come first in the output layout)
-            for i in 0..lhs_layout.shape.len() {
-                lhs_indices.push(output_indices[i]);
+            for output_idx in output_indices.iter().take(lhs_layout.shape.len()) {
+                lhs_indices.push(*output_idx);
             }
 
             // Then, handle the rhs dimensions
             // We need to map from output dimensions to rhs dimensions using corresponding_dims
             let mut rhs_idx = 0;
-            for i in 0..output_indices.len() {
+            for (i, output_idx) in output_indices.iter().enumerate() {
                 // Check if this output dimension corresponds to an lhs dimension
                 let is_lhs_dim = i < lhs_layout.shape.len();
 
                 if is_lhs_dim {
-                    // Check if this lhs dimension has a corresponding rhs dimension
-                    let lhs_dim = i;
-                    if let Some(&(_, rhs_dim)) =
-                        ucorresponding_dims.iter().find(|&&(l, _)| l == lhs_dim)
+                    if let Some(&(_, rhs_dim)) = ucorresponding_dims.iter().find(|&&(l, _)| l == i)
                     {
                         // This dimension is shared, use the same index
-                        if rhs_indices.len() <= rhs_dim as usize {
-                            rhs_indices.resize(rhs_dim as usize + 1, 0);
+                        if rhs_indices.len() <= rhs_dim {
+                            rhs_indices.resize(rhs_dim + 1, 0);
                         }
-                        rhs_indices[rhs_dim as usize] = output_indices[i];
+                        rhs_indices[rhs_dim] = *output_idx;
                     }
                 } else {
                     // This is a non-corresponding rhs dimension
@@ -81,9 +78,9 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
                         rhs_idx += 1;
                     }
                     if rhs_idx < rhs_indices.len() {
-                        rhs_indices[rhs_idx] = output_indices[i];
+                        rhs_indices[rhs_idx] = *output_idx;
                     } else {
-                        rhs_indices.push(output_indices[i]);
+                        rhs_indices.push(*output_idx);
                     }
                     rhs_idx += 1;
                 }

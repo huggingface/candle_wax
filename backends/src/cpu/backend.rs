@@ -2,7 +2,7 @@ use egg::{
     CostFunction, EGraph, Extractor, Id, Rewrite, Runner, Subst, Var, define_language, rewrite,
 };
 use regex::Regex;
-use std::{collections::HashMap, sync::Arc, usize};
+use std::{collections::HashMap, sync::Arc};
 
 use core::{
     Layout,
@@ -449,7 +449,7 @@ impl<S: Storage> CpuBackendContext<S> {
         &self,
         lhs: &Arc<Tensor<S>>,
         rhs: &Arc<Tensor<S>>,
-        corrdims: &Vec<(i32, i32)>,
+        corrdims: &[(i32, i32)],
         dim: i32,
     ) -> Arc<Tensor<S>> {
         // For matmul, we assume the multiply and sum functions are standard
