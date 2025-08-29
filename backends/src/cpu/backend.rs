@@ -1,7 +1,7 @@
 use egg::{
-    define_language, rewrite, CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst, Var
+    CostFunction, EGraph, Extractor, Id, Rewrite, Runner, Subst, Var, define_language, rewrite,
 };
-use std::{collections::HashMap, str::FromStr, sync::Arc, usize};
+use std::{collections::HashMap, sync::Arc, usize};
 
 use core::{
     Layout,
@@ -59,10 +59,7 @@ define_language! {
     }
 }
 
-fn is_matmul(
-    f1: Var,
-    f2: Var,
-) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
+fn is_matmul(f1: Var, f2: Var) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
     let mul = CpuBackendLanguage::BroadcastFunc("Multiply".to_string());
     let sum = CpuBackendLanguage::ReduceFunc("Sum".to_string());
 
@@ -133,22 +130,24 @@ impl<S: Storage> CpuBackendContext<S> {
                 let tensor_id = self.add_tensor(t.clone());
                 self.egraph.add(CpuBackendLanguage::Tensor(tensor_id))
             }
-            
+
             LazyTensor::Map { input, func } => {
                 let input_id = self.build_expression(input);
                 let func_name = self.add_map_func(func.clone());
                 let func_id = self.egraph.add(CpuBackendLanguage::MapFunc(func_name));
-                self.egraph.add(CpuBackendLanguage::Map([input_id, func_id]))
+                self.egraph
+                    .add(CpuBackendLanguage::Map([input_id, func_id]))
             }
-            
+
             LazyTensor::Reduce { input, dim, func } => {
                 let input_id = self.build_expression(input);
                 let func_name = self.add_reduce_func(func.clone());
                 let func_id = self.egraph.add(CpuBackendLanguage::ReduceFunc(func_name));
                 let dim_id = self.egraph.add(CpuBackendLanguage::Dim(*dim));
-                self.egraph.add(CpuBackendLanguage::Reduce([input_id, dim_id, func_id]))
+                self.egraph
+                    .add(CpuBackendLanguage::Reduce([input_id, dim_id, func_id]))
             }
-            
+
             LazyTensor::Broadcast {
                 lhs_input,
                 rhs_input,
@@ -158,12 +157,16 @@ impl<S: Storage> CpuBackendContext<S> {
                 let lhs_id = self.build_expression(lhs_input);
                 let rhs_id = self.build_expression(rhs_input);
                 let func_name = self.add_broadcast_func(func.clone());
-                let func_id = self.egraph.add(CpuBackendLanguage::BroadcastFunc(func_name));
+                let func_id = self
+                    .egraph
+                    .add(CpuBackendLanguage::BroadcastFunc(func_name));
                 let dims_id = self.add_corresponding_dims(corresponding_dimensions.clone());
-                let corrdim_id = self.egraph.add(CpuBackendLanguage::CorrespondingDims(dims_id));
-                
+                let corrdim_id = self
+                    .egraph
+                    .add(CpuBackendLanguage::CorrespondingDims(dims_id));
+
                 self.egraph.add(CpuBackendLanguage::Broadcast([
-                    lhs_id, rhs_id, corrdim_id, func_id
+                    lhs_id, rhs_id, corrdim_id, func_id,
                 ]))
             }
         }
@@ -386,27 +389,9 @@ impl<S: Storage> CpuBackendContext<S> {
                 self.execute_fused_matmul(&lhs_input, &rhs_input, corrdims, dim)
             }
 
-            CpuBackendLanguage::Dim(_) => {
-                panic!("Cannot execute dimension node directly")
-            }
-
-            CpuBackendLanguage::MapFunc(_) => {
-                panic!("Cannot execute map func node directly")
-            }
-
-            CpuBackendLanguage::ReduceFunc(_) => {
-                panic!("Cannot execute reduce func node directly")
-            }
-
-            CpuBackendLanguage::BroadcastFunc(_) => {
-                panic!("Cannot execute broadcast func node directly")
-            }
-
-            CpuBackendLanguage::CorrespondingDims(_) => {
-                panic!("Cannot execute corresponding dimensions node directly")
-            }
-
             CpuBackendLanguage::Output(input_id) => self.execute_node(&expr[*input_id], expr),
+
+            _ => panic!("Cannot execute leaf node directly"),
         }
     }
 
@@ -500,7 +485,6 @@ impl<S: Storage> Default for CpuBackendContext<S> {
         }
     }
 }
-
 
 impl<S: Storage> From<LazyTensor<S>> for CpuBackendContext<S> {
     fn from(tensor: LazyTensor<S>) -> Self {
