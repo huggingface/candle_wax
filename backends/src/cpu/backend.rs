@@ -1,7 +1,7 @@
 use egg::{
-    CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst, define_language, rewrite,
+    define_language, rewrite, CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst, Var
 };
-use std::{collections::HashMap, sync::Arc, usize};
+use std::{collections::HashMap, str::FromStr, sync::Arc, usize};
 
 use core::{
     Layout,
@@ -39,21 +39,6 @@ impl LazyBackend for CpuBackend {
     }
 }
 
-fn is_matmul(
-    f1: &'static str,
-    f2: &'static str,
-) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
-    let var1 = f1.parse().unwrap();
-    let var2 = f2.parse().unwrap();
-
-    let mul = CpuBackendLanguage::BroadcastFunc("Multiply".to_string());
-    let sum = CpuBackendLanguage::ReduceFunc("Sum".to_string());
-
-    move |egraph, _, subst| {
-        egraph[subst[var1]].nodes.contains(&mul) && egraph[subst[var2]].nodes.contains(&sum)
-    }
-}
-
 define_language! {
     pub enum CpuBackendLanguage {
         "map" = Map([Id; 2]), // [input_expr, func_id]
@@ -71,6 +56,18 @@ define_language! {
         Tensor(usize),
         CorrespondingDims(usize),
         Dim(i32),
+    }
+}
+
+fn is_matmul(
+    f1: Var,
+    f2: Var,
+) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
+    let mul = CpuBackendLanguage::BroadcastFunc("Multiply".to_string());
+    let sum = CpuBackendLanguage::ReduceFunc("Sum".to_string());
+
+    move |egraph, _, subst| {
+        egraph[subst[f1]].nodes.contains(&mul) && egraph[subst[f2]].nodes.contains(&sum)
     }
 }
 
@@ -123,104 +120,53 @@ impl<S: Storage> CpuBackendContext<S> {
         unique_id
     }
 
-    pub fn combine(&mut self, other: CpuBackendContext<S>) -> HashMap<Id, Id> {
-        // Merge all the hash maps
-        self.tensors.extend(other.tensors);
-        self.map_funcs.extend(other.map_funcs);
-        self.reduce_funcs.extend(other.reduce_funcs);
-        self.broadcast_funcs.extend(other.broadcast_funcs);
-        self.corresponding_dims.extend(other.corresponding_dims);
+    pub fn from_lazy_tensor_compositional(tensor: LazyTensor<S>) -> Self {
+        let mut context = CpuBackendContext::default();
+        let eval_id = context.build_expression(&tensor);
+        context.eval_id = Some(eval_id);
+        context
+    }
 
-        // For e-graph merging, we need to rebuild the other e-graph's expressions
-        // in our e-graph context. This is more complex than simple ID mapping.
-
-        // Create a mapping from other's class IDs to our class IDs
-        let mut id_mapping = HashMap::new();
-
-        // We need to process nodes in topological order to ensure dependencies are met
-        // For simplicity, we'll use a worklist approach
-        let mut worklist: Vec<Id> = other.egraph.classes().map(|class| class.id).collect();
-        let mut processed = std::collections::HashSet::new();
-
-        while !worklist.is_empty() {
-            let mut progress = false;
-            let mut remaining = Vec::new();
-
-            for &class_id in &worklist {
-                if processed.contains(&class_id) {
-                    continue;
-                }
-
-                let class = &other.egraph[class_id];
-                let mut can_process = true;
-
-                // Check if all children of all nodes in this class have been processed
-                for node in &class.nodes {
-                    for &child_id in node.children() {
-                        if !processed.contains(&child_id) && !id_mapping.contains_key(&child_id) {
-                            can_process = false;
-                            break;
-                        }
-                    }
-                    if !can_process {
-                        break;
-                    }
-                }
-
-                if can_process {
-                    // Process this class
-                    let representative_node = &class.nodes[0]; // Take first node as representative
-
-                    // Map children to our ID space
-                    let mapped_node = representative_node.clone().map_children(|child_id| {
-                        id_mapping.get(&child_id).copied().unwrap_or(child_id)
-                    });
-
-                    // Add to our e-graph
-                    let new_id = self.egraph.add(mapped_node);
-                    id_mapping.insert(class_id, new_id);
-                    processed.insert(class_id);
-                    progress = true;
-
-                    // Add all other nodes in the class to maintain equivalences
-                    for node in &class.nodes[1..] {
-                        let mapped_node = node.clone().map_children(|child_id| {
-                            id_mapping.get(&child_id).copied().unwrap_or(child_id)
-                        });
-                        let another_id = self.egraph.add(mapped_node);
-                        self.egraph.union(new_id, another_id);
-                    }
-                } else {
-                    remaining.push(class_id);
-                }
+    fn build_expression(&mut self, tensor: &LazyTensor<S>) -> Id {
+        match tensor {
+            LazyTensor::Tensor(t) => {
+                let tensor_id = self.add_tensor(t.clone());
+                self.egraph.add(CpuBackendLanguage::Tensor(tensor_id))
             }
-
-            if !progress && !remaining.is_empty() {
-                // If we can't make progress, there might be cycles or missing dependencies
-                // For now, we'll break to avoid infinite loops
-                break;
+            
+            LazyTensor::Map { input, func } => {
+                let input_id = self.build_expression(input);
+                let func_name = self.add_map_func(func.clone());
+                let func_id = self.egraph.add(CpuBackendLanguage::MapFunc(func_name));
+                self.egraph.add(CpuBackendLanguage::Map([input_id, func_id]))
             }
-
-            worklist = remaining;
-        }
-
-        // Update eval_id if the other context had one
-        if let Some(other_eval_id) = other.eval_id {
-            if let Some(&mapped_eval_id) = id_mapping.get(&other_eval_id) {
-                match self.eval_id {
-                    Some(current_eval_id) => {
-                        // If we have both eval_ids, we might want to union them or handle differently
-                        // For now, we'll keep the current one and ignore the other
-                        // Alternatively: self.egraph.union(current_eval_id, mapped_eval_id);
-                    }
-                    None => {
-                        self.eval_id = Some(mapped_eval_id);
-                    }
-                }
+            
+            LazyTensor::Reduce { input, dim, func } => {
+                let input_id = self.build_expression(input);
+                let func_name = self.add_reduce_func(func.clone());
+                let func_id = self.egraph.add(CpuBackendLanguage::ReduceFunc(func_name));
+                let dim_id = self.egraph.add(CpuBackendLanguage::Dim(*dim));
+                self.egraph.add(CpuBackendLanguage::Reduce([input_id, dim_id, func_id]))
+            }
+            
+            LazyTensor::Broadcast {
+                lhs_input,
+                rhs_input,
+                corresponding_dimensions,
+                func,
+            } => {
+                let lhs_id = self.build_expression(lhs_input);
+                let rhs_id = self.build_expression(rhs_input);
+                let func_name = self.add_broadcast_func(func.clone());
+                let func_id = self.egraph.add(CpuBackendLanguage::BroadcastFunc(func_name));
+                let dims_id = self.add_corresponding_dims(corresponding_dimensions.clone());
+                let corrdim_id = self.egraph.add(CpuBackendLanguage::CorrespondingDims(dims_id));
+                
+                self.egraph.add(CpuBackendLanguage::Broadcast([
+                    lhs_id, rhs_id, corrdim_id, func_id
+                ]))
             }
         }
-
-        id_mapping
     }
 
     pub fn add_rewrites(&mut self) {
@@ -236,7 +182,7 @@ impl<S: Storage> CpuBackendContext<S> {
             rewrite!("fused-matmul";
                 "(reduce (broadcast ?x ?y ?corrdims ?multiply_func) ?dim ?sum_func)" =>
                 "(fused_matmul ?x ?y ?corrdims ?dim)"
-                if is_matmul("?multiply_func", "?sum_func")
+                if is_matmul("?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap())
             ),
         ];
     }
@@ -555,69 +501,10 @@ impl<S: Storage> Default for CpuBackendContext<S> {
     }
 }
 
+
 impl<S: Storage> From<LazyTensor<S>> for CpuBackendContext<S> {
     fn from(tensor: LazyTensor<S>) -> Self {
-        match tensor {
-            LazyTensor::Tensor(t) => {
-                let mut context = CpuBackendContext::default();
-                let tensor_id = context.add_tensor(t);
-                let id = context.egraph.add(CpuBackendLanguage::Tensor(tensor_id));
-                context.eval_id = Some(id);
-                context
-            }
-            LazyTensor::Map { input, func } => {
-                let mut context = CpuBackendContext::from(*input);
-                let func_id = context.add_map_func(func);
-                let map_func_id = context.egraph.add(CpuBackendLanguage::MapFunc(func_id));
-                let id = context.egraph.add(CpuBackendLanguage::Map([
-                    context.eval_id.unwrap(),
-                    map_func_id,
-                ]));
-                context.eval_id = Some(id);
-                context
-            }
-            LazyTensor::Reduce { input, dim, func } => {
-                let mut context = CpuBackendContext::from(*input);
-                let func_id = context.add_reduce_func(func);
-                let reduce_func_id = context.egraph.add(CpuBackendLanguage::ReduceFunc(func_id));
-                let dim_id = context.egraph.add(CpuBackendLanguage::Dim(dim));
-                let id: Id = context.egraph.add(CpuBackendLanguage::Reduce([
-                    context.eval_id.unwrap(),
-                    dim_id,
-                    reduce_func_id,
-                ]));
-                context.eval_id = Some(id);
-                context
-            }
-            LazyTensor::Broadcast {
-                lhs_input,
-                rhs_input,
-                corresponding_dimensions,
-                func,
-            } => {
-                let mut context = CpuBackendContext::from(*lhs_input);
-                let rhs_context = CpuBackendContext::from(*rhs_input);
-                let rhs_id = rhs_context.eval_id.expect("RHS eval_id missing");
-                let mapping = context.combine(rhs_context);
-                let rhs_id = *mapping.get(&rhs_id).expect("RHS ID not found in mapping");
-                let func_id = context.add_broadcast_func(func);
-                let reduce_func_id = context
-                    .egraph
-                    .add(CpuBackendLanguage::BroadcastFunc(func_id));
-                let corrdims_id = context.add_corresponding_dims(corresponding_dimensions);
-                let corrdim_ids = context
-                    .egraph
-                    .add(CpuBackendLanguage::CorrespondingDims(corrdims_id));
-                let id: Id = context.egraph.add(CpuBackendLanguage::Broadcast([
-                    context.eval_id.unwrap(),
-                    rhs_id, // Note: This should be the eval_id of rhs_input after combining
-                    corrdim_ids,
-                    reduce_func_id,
-                ]));
-                context.eval_id = Some(id);
-                context
-            }
-        }
+        CpuBackendContext::from_lazy_tensor_compositional(tensor)
     }
 }
 
