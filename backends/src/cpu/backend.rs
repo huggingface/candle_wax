@@ -270,9 +270,9 @@ impl<S: Storage> CpuNodeExecutor<S> for CpuExecutor {
         match node {
             CpuBackendLanguage::Tensor(tensor_id) => context
                 .tensors
-                .get(tensor_id.into())
+                .get(tensor_id)
                 .cloned()
-                .ok_or_else(|| CpuBackendError::TensorNotFound((*tensor_id).into())),
+                .ok_or(CpuBackendError::TensorNotFound(*tensor_id)),
 
             CpuBackendLanguage::Map([input_id, func_id]) => {
                 self.execute_map(*input_id, *func_id, expr, context)
@@ -422,7 +422,7 @@ impl CpuExecutor {
 
         let corrdims = context
             .corresponding_dims
-            .get(&corrdims_lookup.into())
+            .get(&corrdims_lookup)
             .cloned()
             .ok_or_else(|| CpuBackendError::FunctionNotFound(corrdims_lookup.to_string()))?;
 
