@@ -151,6 +151,15 @@ pub trait BackendContext: Default {
     fn evaluate(&mut self) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError>;
 }
 
+pub trait EggNodeExecutor<B: BackendContext> {
+    fn execute_node(
+        &self,
+        node: &B::BackendLanguage,
+        expr: &egg::RecExpr<B::BackendLanguage>,
+        context: &B,
+    ) -> Result<Arc<Tensor<B::BackendStorage>>, B::BackendError>;
+}
+
 pub struct ExpressionBuilder<C: BackendContext> {
     context: C,
 }
@@ -249,18 +258,9 @@ impl<C: BackendContext> ExpressionBuilder<C> {
     }
 }
 
-pub trait CpuNodeExecutor<S: Storage> {
-    fn execute_node(
-        &self,
-        node: &CpuBackendLanguage,
-        expr: &egg::RecExpr<CpuBackendLanguage>,
-        context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>, CpuBackendError>;
-}
-
 pub struct CpuExecutor;
 
-impl<S: Storage> CpuNodeExecutor<S> for CpuExecutor {
+impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
     fn execute_node(
         &self,
         node: &CpuBackendLanguage,
