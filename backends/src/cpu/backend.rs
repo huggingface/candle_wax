@@ -1,5 +1,6 @@
 use egg::{
-    CostFunction, EGraph, Extractor, Id, Rewrite, Runner, Subst, Var, define_language, rewrite,
+    CostFunction, EGraph, Extractor, Id, Language, Rewrite, Runner, Subst, Var, define_language,
+    rewrite,
 };
 use regex::Regex;
 use std::{collections::HashMap, sync::Arc};
@@ -17,22 +18,17 @@ use core::{
 };
 use macros::BackendOps;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum CpuBackendError {
     TensorNotFound(usize),
-
     FunctionNotFound(String),
-
     UnexpectedNodeType { expected: String, found: String },
-
     CorrespondingDimensionsNotFound(usize),
-
     NoEvaluationId,
-
     EmptyExpression,
+    ExecutionFailed(String),
 }
-
-pub type Result<T> = std::result::Result<T, CpuBackendError>;
 
 #[derive(BackendOps)]
 pub struct CpuBackend {}
@@ -43,18 +39,32 @@ impl LazyBackend for CpuBackend {
     fn eval<S: Storage>(tensor: LazyTensor<S>) -> Tensor<S> {
         let mut context = CpuBackendContext::from(tensor);
 
-        context.eval_id = Some(
+        context.eval_node_id = Some(
             context
                 .egraph
-                .add(CpuBackendLanguage::Output(context.eval_id.unwrap())),
+                .add(CpuBackendLanguage::Output(context.eval_node_id.unwrap())),
         );
 
-        context.add_rewrites();
+        context.add_rewrites(&[
+            rewrite!("map-reduce-fusion";
+                "(reduce (map ?x ?f) ?dim ?g)" =>
+                "(fused_map_reduce ?x ?f ?dim ?g)"
+            ),
+            rewrite!("reduce-map-fusion";
+                "(map (reduce ?x ?dim ?f) ?g)" =>
+                "(fused_reduce_map ?x ?dim ?f ?g)"
+            ),
+            rewrite!("fused-matmul";
+                "(reduce (broadcast ?x ?y ?corrdims ?multiply_func) ?dim ?sum_func)" =>
+                "(fused_matmul ?x ?y ?corrdims ?dim)"
+                if is_matmul("?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap())
+            ),
+        ]);
         context.optimize();
 
         match context.evaluate() {
             Ok(result) => result.as_ref().clone(),
-            Err(_e) => panic!("Evaluation failed"),
+            Err(e) => panic!("CPU Backend evaluation failed: {:?}", e),
         }
     }
 }
@@ -82,32 +92,41 @@ define_language! {
 }
 
 pub trait BackendContext: Default {
-    type S: Storage;
+    type BackendStorage: Storage;
+    type BackendError;
+    type BackendLanguage: Language;
 
-    fn set_eval_id(&mut self, id: Id);
-    fn get_eval_id(&self) -> Option<Id>;
+    fn set_eval_node_id(&mut self, id: Id);
 
-    fn add_tensor(&mut self, tensor: Arc<Tensor<Self::S>>) -> Id;
+    fn add_tensor(&mut self, tensor: Arc<Tensor<Self::BackendStorage>>) -> Id;
+
     fn add_map(
         &mut self,
         input: Id,
         func: Arc<
-            dyn MapFunc<Self::S, Self::S, <Self::S as Storage>::Inner, <Self::S as Storage>::Inner>,
+            dyn MapFunc<
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
+                >,
         >,
     ) -> Id;
+
     fn add_reduce(
         &mut self,
         input: Id,
         dim: i32,
         func: Arc<
             dyn ReduceFunc<
-                    Self::S,
-                    Self::S,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
     ) -> Id;
+
     fn add_broadcast(
         &mut self,
         lhs_input: Id,
@@ -115,15 +134,21 @@ pub trait BackendContext: Default {
         corresponding_dimensions: Vec<(i32, i32)>,
         func: Arc<
             dyn BroadcastFunc<
-                    Self::S,
-                    Self::S,
-                    Self::S,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
     ) -> Id;
+
+    fn add_rewrites(&mut self, rewrites: &[Rewrite<Self::BackendLanguage, ()>]);
+
+    fn optimize(&mut self);
+
+    fn evaluate(&mut self) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError>;
 }
 
 pub struct ExpressionBuilder<C: BackendContext> {
@@ -137,13 +162,13 @@ impl<C: BackendContext> ExpressionBuilder<C> {
         }
     }
 
-    pub fn build_from_lazy_tensor(mut self, tensor: &LazyTensor<C::S>) -> C {
-        let eval_id = self.build_expression(tensor);
-        self.context.set_eval_id(eval_id);
+    pub fn build_from_lazy_tensor(mut self, tensor: &LazyTensor<C::BackendStorage>) -> C {
+        let eval_node_id = self.build_expression(tensor);
+        self.context.set_eval_node_id(eval_node_id);
         self.context
     }
 
-    fn build_expression(&mut self, tensor: &LazyTensor<C::S>) -> Id {
+    fn build_expression(&mut self, tensor: &LazyTensor<C::BackendStorage>) -> Id {
         match tensor {
             LazyTensor::Tensor(t) => self.build_tensor_expr(t.clone()),
             LazyTensor::Map { input, func } => self.build_map_expr(input, func.clone()),
@@ -164,63 +189,56 @@ impl<C: BackendContext> ExpressionBuilder<C> {
         }
     }
 
-    fn build_tensor_expr(&mut self, tensor: Arc<Tensor<C::S>>) -> Id {
-        // let tensor_id = self.context.add_tensor(tensor.clone());
-        // self.context
-        //     .egraph
-        //     .add(CpuBackendLanguage::Tensor(tensor_id))
+    fn build_tensor_expr(&mut self, tensor: Arc<Tensor<C::BackendStorage>>) -> Id {
         self.context.add_tensor(tensor)
     }
 
     fn build_map_expr(
         &mut self,
-        input: &LazyTensor<C::S>,
-        func: Arc<dyn MapFunc<C::S, C::S, <C::S as Storage>::Inner, <C::S as Storage>::Inner>>,
+        input: &LazyTensor<C::BackendStorage>,
+        func: Arc<
+            dyn MapFunc<
+                    C::BackendStorage,
+                    C::BackendStorage,
+                    <C::BackendStorage as Storage>::Inner,
+                    <C::BackendStorage as Storage>::Inner,
+                >,
+        >,
     ) -> Id {
         let input_id = self.build_expression(input);
         self.context.add_map(input_id, func)
-        // let func_name = self.context.add_map_func(func.clone());
-        // let func_id = self
-        //     .context
-        //     .egraph
-        //     .add(CpuBackendLanguage::MapFunc(func_name));
-        // self.context
-        //     .egraph
-        //     .add(CpuBackendLanguage::Map([input_id, func_id]))
     }
 
     fn build_reduce_expr(
         &mut self,
-        input: &LazyTensor<C::S>,
+        input: &LazyTensor<C::BackendStorage>,
         dim: i32,
-        func: Arc<dyn ReduceFunc<C::S, C::S, <C::S as Storage>::Inner, <C::S as Storage>::Inner>>,
+        func: Arc<
+            dyn ReduceFunc<
+                    C::BackendStorage,
+                    C::BackendStorage,
+                    <C::BackendStorage as Storage>::Inner,
+                    <C::BackendStorage as Storage>::Inner,
+                >,
+        >,
     ) -> Id {
         let input_id = self.build_expression(input);
         self.context.add_reduce(input_id, dim, func)
-        // let func_name = self.context.add_reduce_func(func.clone());
-        // let func_id = self
-        //     .context
-        //     .egraph
-        //     .add(CpuBackendLanguage::ReduceFunc(func_name));
-        // let dim_id = self.context.egraph.add(CpuBackendLanguage::Dim(dim));
-        // self.context
-        //     .egraph
-        //     .add(CpuBackendLanguage::Reduce([input_id, dim_id, func_id]))
     }
 
     fn build_broadcast_expr(
         &mut self,
-        lhs_input: &LazyTensor<C::S>,
-        rhs_input: &LazyTensor<C::S>,
+        lhs_input: &LazyTensor<C::BackendStorage>,
+        rhs_input: &LazyTensor<C::BackendStorage>,
         corresponding_dimensions: Vec<(i32, i32)>,
         func: Arc<
             dyn BroadcastFunc<
-                    C::S,
-                    C::S,
-                    C::S,
-                    <C::S as Storage>::Inner,
-                    <C::S as Storage>::Inner,
-                    <C::S as Storage>::Inner,
+                    C::BackendStorage,
+                    C::BackendStorage,
+                    C::BackendStorage,
+                    <C::BackendStorage as Storage>::Inner,
+                    <C::BackendStorage as Storage>::Inner,
+                    <C::BackendStorage as Storage>::Inner,
                 >,
         >,
     ) -> Id {
@@ -228,22 +246,6 @@ impl<C: BackendContext> ExpressionBuilder<C> {
         let rhs_id = self.build_expression(rhs_input);
         self.context
             .add_broadcast(lhs_id, rhs_id, corresponding_dimensions, func)
-        // let func_name = self.context.add_broadcast_func(func.clone());
-        // let func_id = self
-        //     .context
-        //     .egraph
-        //     .add(CpuBackendLanguage::BroadcastFunc(func_name));
-        // let dims_id = self
-        //     .context
-        //     .add_corresponding_dims(corresponding_dimensions.clone());
-        // let corrdim_id = self
-        //     .context
-        //     .egraph
-        //     .add(CpuBackendLanguage::CorrespondingDims(dims_id));
-
-        // self.context.egraph.add(CpuBackendLanguage::Broadcast([
-        //     lhs_id, rhs_id, corrdim_id, func_id,
-        // ]))
     }
 }
 
@@ -253,7 +255,7 @@ pub trait CpuNodeExecutor<S: Storage> {
         node: &CpuBackendLanguage,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>>;
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError>;
 }
 
 pub struct CpuExecutor;
@@ -264,9 +266,13 @@ impl<S: Storage> CpuNodeExecutor<S> for CpuExecutor {
         node: &CpuBackendLanguage,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         match node {
-            CpuBackendLanguage::Tensor(tensor_id) => Ok(context.get_tensor(*tensor_id)?.clone()),
+            CpuBackendLanguage::Tensor(tensor_id) => context
+                .tensors
+                .get(tensor_id.into())
+                .cloned()
+                .ok_or_else(|| CpuBackendError::TensorNotFound((*tensor_id).into())),
 
             CpuBackendLanguage::Map([input_id, func_id]) => {
                 self.execute_map(*input_id, *func_id, expr, context)
@@ -325,7 +331,7 @@ impl CpuExecutor {
         func_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let input = self.execute_node(&expr[input_id], expr, context)?;
 
         let func_lookup = match &expr[func_id] {
@@ -338,7 +344,11 @@ impl CpuExecutor {
             }
         };
 
-        let func = context.get_map_func(func_lookup)?;
+        let func = context
+            .map_funcs
+            .get(func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 
         Ok(Arc::new(Tensor::new(
             input.layout.clone(),
@@ -353,7 +363,7 @@ impl CpuExecutor {
         func_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let input = self.execute_node(&expr[input_id], expr, context)?;
 
         let dim = match &expr[dim_id] {
@@ -376,7 +386,11 @@ impl CpuExecutor {
             }
         };
 
-        let func = context.get_reduce_func(func_lookup)?;
+        let func = context
+            .reduce_funcs
+            .get(func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 
         Ok(Arc::new(Tensor::new(
             input.layout.clone(),
@@ -392,7 +406,7 @@ impl CpuExecutor {
         func_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let lhs_input = self.execute_node(&expr[lhs_id], expr, context)?;
         let rhs_input = self.execute_node(&expr[rhs_id], expr, context)?;
 
@@ -406,19 +420,27 @@ impl CpuExecutor {
             }
         };
 
-        let corrdims = context.get_corresponding_dims(corrdims_lookup)?;
+        let corrdims = context
+            .corresponding_dims
+            .get(&corrdims_lookup.into())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(corrdims_lookup.to_string()))?;
 
         let func_lookup = match &expr[func_id] {
             CpuBackendLanguage::BroadcastFunc(f) => f,
             _ => {
-                return Err(CpuBackendError::UnexpectedNodeType { 
+                return Err(CpuBackendError::UnexpectedNodeType {
                     expected: "BroadcastFunc".to_string(),
                     found: format!("{:?}", &expr[func_id]),
                 });
             }
         };
 
-        let func = context.get_broadcast_func(func_lookup)?;
+        let func = context
+            .broadcast_funcs
+            .get(func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 
         Ok(Arc::new(Tensor::new(
             lhs_input.layout.broadcast(
@@ -427,7 +449,7 @@ impl CpuExecutor {
                     .layout
                     .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
                         &rhs_input.layout,
-                        corrdims,
+                        &corrdims,
                     ),
             ),
             func.call(
@@ -435,7 +457,7 @@ impl CpuExecutor {
                 &lhs_input.storage,
                 &rhs_input.layout,
                 &rhs_input.storage,
-                corrdims,
+                &corrdims,
             ),
         )))
     }
@@ -448,7 +470,7 @@ impl CpuExecutor {
         reduce_func_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let input = self.execute_node(&expr[input_id], expr, context)?;
 
         let map_func_lookup = match &expr[map_func_id] {
@@ -481,8 +503,17 @@ impl CpuExecutor {
             }
         };
 
-        let map_func = context.get_map_func(map_func_lookup)?;
-        let reduce_func = context.get_reduce_func(reduce_func_lookup)?;
+        let map_func = context
+            .map_funcs
+            .get(map_func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(map_func_lookup.to_string()))?;
+
+        let reduce_func = context
+            .reduce_funcs
+            .get(reduce_func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(reduce_func_lookup.to_string()))?;
 
         let mapped = map_func.call(&input.layout, &input.storage);
         Ok(Arc::new(Tensor::new(
@@ -501,8 +532,7 @@ impl CpuExecutor {
         map_func_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
-        println!("Executing fused reduce-map operation");
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let input = self.execute_node(&expr[input_id], expr, context)?;
 
         let map_func_lookup = match &expr[map_func_id] {
@@ -535,8 +565,17 @@ impl CpuExecutor {
             }
         };
 
-        let map_func = context.get_map_func(map_func_lookup)?;
-        let reduce_func = context.get_reduce_func(reduce_func_lookup)?;
+        let map_func = context
+            .map_funcs
+            .get(map_func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(map_func_lookup.to_string()))?;
+
+        let reduce_func = context
+            .reduce_funcs
+            .get(reduce_func_lookup.as_str())
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(reduce_func_lookup.to_string()))?;
 
         let reduced = reduce_func.call(&input.layout, &input.storage, dim);
         Ok(Arc::new(Tensor::new(
@@ -555,8 +594,7 @@ impl CpuExecutor {
         dim_id: Id,
         expr: &egg::RecExpr<CpuBackendLanguage>,
         context: &CpuBackendContext<S>,
-    ) -> Result<Arc<Tensor<S>>> {
-        println!("Executing fused matmul operation");
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         let lhs_input = self.execute_node(&expr[lhs_id], expr, context)?;
         let rhs_input = self.execute_node(&expr[rhs_id], expr, context)?;
 
@@ -570,7 +608,11 @@ impl CpuExecutor {
             }
         };
 
-        let corrdims = context.get_corresponding_dims(corrdims_lookup)?;
+        let corrdims = context
+            .corresponding_dims
+            .get(&corrdims_lookup)
+            .cloned()
+            .ok_or_else(|| CpuBackendError::FunctionNotFound(corrdims_lookup.to_string()))?;
 
         let dim = match &expr[dim_id] {
             CpuBackendLanguage::Dim(d) => *d,
@@ -582,25 +624,31 @@ impl CpuExecutor {
             }
         };
 
-        let multiply_func = context.get_broadcast_func(&format!(
-            "CpuMultiply({}, {} -> {})",
-            std::any::type_name::<S>(),
-            std::any::type_name::<S>(),
-            std::any::type_name::<S>()
-        ))?;
+        let multiply_func = context
+            .broadcast_funcs
+            .get(&format!(
+                "CpuMultiply({}, {} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
+            .unwrap();
 
-        let sum_func = context.get_reduce_func(&format!(
-            "CpuSum({} -> {})",
-            std::any::type_name::<S>(),
-            std::any::type_name::<S>()
-        ))?;
+        let sum_func = context
+            .reduce_funcs
+            .get(&format!(
+                "CpuSum({} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
+            .unwrap();
 
         let broadcasted = multiply_func.call(
             &lhs_input.layout,
             &lhs_input.storage,
             &rhs_input.layout,
             &rhs_input.storage,
-            corrdims,
+            &corrdims,
         );
 
         let broadcasted_layout = lhs_input.layout.broadcast(
@@ -609,7 +657,7 @@ impl CpuExecutor {
                 .layout
                 .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
                     &rhs_input.layout,
-                    corrdims,
+                    &corrdims,
                 ),
         );
 
@@ -629,138 +677,26 @@ pub struct CpuBackendContext<S: Storage> {
     pub broadcast_funcs:
         HashMap<String, Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>>,
     pub corresponding_dims: HashMap<usize, Vec<(i32, i32)>>,
+
     pub egraph: EGraph<CpuBackendLanguage, ()>,
-    pub eval_id: Option<Id>,
+    pub eval_node_id: Option<Id>,
     pub rewrites: Vec<Rewrite<CpuBackendLanguage, ()>>,
+
     pub executor: CpuExecutor,
 }
 
-impl<S: Storage> CpuBackendContext<S> {
-    pub fn add_tensor(&mut self, tensor: Arc<Tensor<S>>) -> usize {
-        let unique_id = Arc::as_ptr(&tensor) as usize;
-        self.tensors.insert(unique_id, tensor);
-        unique_id
-    }
-
-    pub fn get_tensor(&self, tensor_id: usize) -> Result<&Arc<Tensor<S>>> {
-        self.tensors
-            .get(&tensor_id)
-            .ok_or(CpuBackendError::TensorNotFound(tensor_id))
-    }
-
-    pub fn add_map_func(&mut self, func: Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>) -> String {
-        let as_str = func.as_str();
-        self.map_funcs.insert(as_str.clone(), func);
-        as_str
-    }
-
-    pub fn get_map_func(
-        &self,
-        func_name: &str,
-    ) -> Result<&Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>> {
-        self.map_funcs
-            .get(func_name)
-            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_name.to_string()))
-    }
-
-    pub fn add_reduce_func(
-        &mut self,
-        func: Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>,
-    ) -> String {
-        let as_str = func.as_str();
-        self.reduce_funcs.insert(as_str.clone(), func);
-        as_str
-    }
-
-    pub fn get_reduce_func(
-        &self,
-        func_name: &str,
-    ) -> Result<&Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>> {
-        self.reduce_funcs
-            .get(func_name)
-            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_name.to_string()))
-    }
-
-    pub fn add_broadcast_func(
-        &mut self,
-        func: Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>,
-    ) -> String {
-        let as_str = func.as_str();
-        self.broadcast_funcs.insert(as_str.clone(), func);
-        as_str
-    }
-
-    pub fn get_broadcast_func(
-        &self,
-        func_name: &str,
-    ) -> Result<&Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>> {
-        self.broadcast_funcs
-            .get(func_name)
-            .ok_or_else(|| CpuBackendError::FunctionNotFound(func_name.to_string()))
-    }
-
-    pub fn add_corresponding_dims(&mut self, dims: Vec<(i32, i32)>) -> usize {
-        let unique_id = &dims as *const _ as usize;
-        self.corresponding_dims.insert(unique_id, dims);
-        unique_id
-    }
-
-    pub fn get_corresponding_dims(&self, dims_id: usize) -> Result<&Vec<(i32, i32)>> {
-        self.corresponding_dims
-            .get(&dims_id)
-            .ok_or(CpuBackendError::CorrespondingDimensionsNotFound(dims_id))
-    }
-
-    pub fn add_rewrites(&mut self) {
-        self.rewrites.extend([
-            rewrite!("map-reduce-fusion";
-                "(reduce (map ?x ?f) ?dim ?g)" =>
-                "(fused_map_reduce ?x ?f ?dim ?g)"
-            ),
-            rewrite!("reduce-map-fusion";
-                "(map (reduce ?x ?dim ?f) ?g)" =>
-                "(fused_reduce_map ?x ?dim ?f ?g)"
-            ),
-            rewrite!("fused-matmul";
-                "(reduce (broadcast ?x ?y ?corrdims ?multiply_func) ?dim ?sum_func)" =>
-                "(fused_matmul ?x ?y ?corrdims ?dim)"
-                if is_matmul("?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap())
-            ),
-        ])
-    }
-
-    pub fn optimize(&mut self) {
-        let runner = Runner::default()
-            .with_egraph(std::mem::take(&mut self.egraph))
-            .run(&self.rewrites);
-
-        self.egraph = runner.egraph;
-    }
-
-    pub fn evaluate(&mut self) -> Result<Arc<Tensor<S>>> {
-        let extractor = Extractor::new(&self.egraph, CpuBackendCost);
-        let eval_id = self.eval_id.ok_or(CpuBackendError::NoEvaluationId)?;
-        let (cost, best_expr) = extractor.find_best(eval_id);
-
-        println!("Best expression cost: {}", cost);
-        let root = best_expr.last().ok_or(CpuBackendError::EmptyExpression)?;
-        self.executor.execute_node(root, &best_expr, self)
-    }
-}
-
 impl<S: Storage> BackendContext for CpuBackendContext<S> {
-    type S = S;
+    type BackendStorage = S;
+    type BackendError = CpuBackendError;
+    type BackendLanguage = CpuBackendLanguage;
 
-    fn set_eval_id(&mut self, id: Id) {
-        self.eval_id = Some(id);
+    fn set_eval_node_id(&mut self, id: Id) {
+        self.eval_node_id = Some(id);
     }
 
-    fn get_eval_id(&self) -> Option<Id> {
-        self.eval_id
-    }
-
-    fn add_tensor(&mut self, tensor: Arc<Tensor<Self::S>>) -> Id {
-        let tensor_name = self.add_tensor(tensor);
+    fn add_tensor(&mut self, tensor: Arc<Tensor<Self::BackendStorage>>) -> Id {
+        let tensor_name = Arc::as_ptr(&tensor) as usize;
+        self.tensors.insert(tensor_name, tensor);
         self.egraph.add(CpuBackendLanguage::Tensor(tensor_name))
     }
 
@@ -768,10 +704,16 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         &mut self,
         input: Id,
         func: Arc<
-            dyn MapFunc<Self::S, Self::S, <Self::S as Storage>::Inner, <Self::S as Storage>::Inner>,
+            dyn MapFunc<
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
+                >,
         >,
     ) -> Id {
-        let func_name = self.add_map_func(func);
+        let func_name = func.as_str();
+        self.map_funcs.insert(func_name.clone(), func);
         let func_id = self.egraph.add(CpuBackendLanguage::MapFunc(func_name));
         self.egraph.add(CpuBackendLanguage::Map([input, func_id]))
     }
@@ -782,14 +724,15 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         dim: i32,
         func: Arc<
             dyn ReduceFunc<
-                    Self::S,
-                    Self::S,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
     ) -> Id {
-        let func_name = self.add_reduce_func(func);
+        let func_name = func.as_str();
+        self.reduce_funcs.insert(func_name.clone(), func);
         let func_id = self.egraph.add(CpuBackendLanguage::ReduceFunc(func_name));
         let dim_id = self.egraph.add(CpuBackendLanguage::Dim(dim));
         self.egraph
@@ -803,26 +746,53 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         corresponding_dimensions: Vec<(i32, i32)>,
         func: Arc<
             dyn BroadcastFunc<
-                    Self::S,
-                    Self::S,
-                    Self::S,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
-                    <Self::S as Storage>::Inner,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    Self::BackendStorage,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
+                    <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
     ) -> Id {
-        let func_name = self.add_broadcast_func(func);
+        let func_name = func.as_str();
+        self.broadcast_funcs.insert(func_name.clone(), func);
         let func_id = self
             .egraph
             .add(CpuBackendLanguage::BroadcastFunc(func_name));
-        let lhs_dims = self.add_corresponding_dims(corresponding_dimensions);
+
+        let lhs_dims = &corresponding_dimensions as *const _ as usize;
+        self.corresponding_dims
+            .insert(lhs_dims, corresponding_dimensions);
+
         let dims_id = self
             .egraph
             .add(CpuBackendLanguage::CorrespondingDims(lhs_dims));
         self.egraph.add(CpuBackendLanguage::Broadcast([
             lhs_input, rhs_input, dims_id, func_id,
         ]))
+    }
+
+    fn add_rewrites(&mut self, other: &[Rewrite<CpuBackendLanguage, ()>]) {
+        self.rewrites.extend_from_slice(other);
+    }
+
+    fn optimize(&mut self) {
+        let runner = Runner::default()
+            .with_egraph(std::mem::take(&mut self.egraph))
+            .run(&self.rewrites);
+
+        self.egraph = runner.egraph;
+    }
+
+    fn evaluate(&mut self) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError> {
+        let extractor = Extractor::new(&self.egraph, CpuBackendCost);
+        let eval_id = self.eval_node_id.ok_or(CpuBackendError::NoEvaluationId)?;
+        let (cost, best_expr) = extractor.find_best(eval_id);
+
+        println!("Best expression cost: {}", cost);
+        let root = best_expr.last().ok_or(CpuBackendError::EmptyExpression)?;
+        self.executor.execute_node(root, &best_expr, self)
     }
 }
 
@@ -835,7 +805,7 @@ impl<S: Storage> Default for CpuBackendContext<S> {
             broadcast_funcs: HashMap::default(),
             corresponding_dims: HashMap::new(),
             egraph: EGraph::default(),
-            eval_id: None,
+            eval_node_id: None,
             rewrites: Vec::new(),
             executor: CpuExecutor,
         }
