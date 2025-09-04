@@ -1,11 +1,9 @@
 [package]
-name = "tests"
+name = "composite_ops"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-macros = { workspace = true }
 core = { workspace = true }
 storage = { workspace = true }
 backends = { workspace = true }
-composite_ops = {workspace = true}

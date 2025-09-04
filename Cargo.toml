@@ -1,5 +1,5 @@
 [workspace]
-members = ["backends", "core", "examples", "macros", "storage", "tests"]
+members = ["backends", "core", "examples", "macros", "composite_ops", "storage", "tests"]
 resolver = "2"
 
 [workspace.package]
@@ -16,3 +16,4 @@ macros = { path = "macros" }
 core = { path = "core" }
 storage = {path = "storage"}
 backends = { path = "backends" }
+composite_ops = {path = "composite_ops" }
