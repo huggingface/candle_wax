@@ -30,6 +30,7 @@ impl CostFunction<CpuBackendLanguage> for CpuBackendCost {
             CpuBackendLanguage::FusedMapReduce(args) => costs(args[0]) + 20,
             CpuBackendLanguage::FusedReduceMap(args) => costs(args[0]) + 20,
             CpuBackendLanguage::FusedMatmul(args) => costs(args[0]) + costs(args[1]) + 30,
+            CpuBackendLanguage::FusedSoftmax(args) => costs(args[0]) + 30,
 
             // Output wrapper
             CpuBackendLanguage::Output(id) => costs(*id),

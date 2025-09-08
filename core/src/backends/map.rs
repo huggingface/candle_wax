@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{backends::Backend, layout::Layout, storage::Storage};
 
 pub trait Map<B, S, T, U, V, F>
@@ -10,7 +12,7 @@ where
     fn map(layout: &Layout, storage: &S, f: F) -> T;
 }
 
-pub trait MapFunc<S, T, U, V>
+pub trait MapFunc<S, T, U, V>: Debug
 where
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,

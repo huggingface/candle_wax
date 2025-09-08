@@ -10,7 +10,7 @@ use crate::storage::Storage;
 mod lazy_tensor;
 pub use lazy_tensor::LazyTensor;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tensor<S: Storage> {
     pub layout: Layout,
     pub storage: S,

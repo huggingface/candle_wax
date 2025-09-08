@@ -60,6 +60,10 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
                 self.execute_fused_matmul(*lhs_id, *rhs_id, *corrdims_id, *dim_id, expr, context)
             }
 
+            CpuBackendLanguage::FusedSoftmax([input_id]) => {
+                self.execute_fused_softmax(*input_id, expr, context)
+            }
+
             CpuBackendLanguage::Output(input_id) => {
                 self.execute_node(&expr[*input_id], expr, context)
             }
@@ -414,6 +418,64 @@ impl CpuExecutor {
         Ok(Arc::new(Tensor::new(
             broadcasted_layout.reduce(broadcasted_layout.signed_dim_to_unsigned_dim(dim)),
             reduced_storage,
+        )))
+    }
+
+    fn execute_fused_softmax<S: Storage>(
+        &self,
+        input_id: Id,
+        expr: &egg::RecExpr<CpuBackendLanguage>,
+        context: &CpuBackendContext<S>,
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
+        let input = self.execute_node(&expr[input_id], expr, context)?;
+
+        let exp_func = context
+            .map_funcs
+            .get(&format!(
+                "CpuExp({} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
+            .unwrap();
+
+        let sum_func = context
+            .reduce_funcs
+            .get(&format!(
+                "CpuSum({} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
+            .unwrap();
+
+        let div_func = context
+            .broadcast_funcs
+            .get(&format!(
+                "CpuDivide({}, {} -> {})",
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>(),
+                std::any::type_name::<S>()
+            ))
+            .unwrap();
+
+        let exp_tensor = Arc::new(Tensor::new(
+            input.layout.clone(),
+            exp_func.call(&input.layout, &input.storage),
+        ));
+        let sum_tensor = Arc::new(Tensor::new(
+            input
+                .layout
+                .reduce(input.layout.signed_dim_to_unsigned_dim(-1)),
+            sum_func.call(&input.layout, &exp_tensor.storage, -1),
+        ));
+        Ok(Arc::new(Tensor::new(
+            input.layout.clone(),
+            div_func.call(
+                &exp_tensor.layout,
+                &exp_tensor.storage,
+                &sum_tensor.layout,
+                &sum_tensor.storage,
+                &[(-2, -1)],
+            ),
         )))
     }
 }

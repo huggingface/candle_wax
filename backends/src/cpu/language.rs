@@ -10,6 +10,7 @@ define_language! {
         "fused_map_reduce" = FusedMapReduce([Id; 4]), // [input_expr, map_func_id, dim, reduce_func_id]
         "fused_reduce_map" = FusedReduceMap([Id; 4]), // [input_expr, reduce_func_id, dim, map_func_id]
         "fused_matmul" = FusedMatmul([Id; 4]),        // [lhs_input_expr, rhs_input_expr, corresponding_dims, dim]
+        "fused_softmax" = FusedSoftmax([Id; 1]),        // [input_expr]
 
         "output" = Output(Id), // input_expr
 
@@ -38,6 +39,11 @@ pub fn rewrites() -> Vec<Rewrite<CpuBackendLanguage, ()>> {
             "(fused_matmul ?x ?y ?corrdims ?dim)"
             if is_matmul("?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap())
         ),
+        rewrite!("fused-softmax";
+            "(broadcast (map ?x ?exp_func) (reduce (map ?x ?exp_func) ?dim ?sum_func) ?corrdims ?div_func)" =>
+            "(fused_softmax ?x)"
+            if is_softmax("?exp_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?div_func".parse().unwrap())
+        ),
     ]
 }
 
@@ -63,5 +69,43 @@ fn is_matmul(f1: Var, f2: Var) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, I
         });
 
         f1_matches && f2_matches
+    }
+}
+
+fn is_softmax(
+    f1: Var,
+    f2: Var,
+    f3: Var,
+) -> impl Fn(&mut EGraph<CpuBackendLanguage, ()>, Id, &Subst) -> bool {
+    let exp_pattern = Regex::new(r".*Exp.*").unwrap();
+    let sum_pattern = Regex::new(r".*Sum.*").unwrap();
+    let div_pattern = Regex::new(r".*Divide.*").unwrap();
+
+    move |egraph, _, subst| {
+        let f1_matches = egraph[subst[f1]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::MapFunc(func_name) = node {
+                exp_pattern.is_match(func_name)
+            } else {
+                false
+            }
+        });
+
+        let f2_matches = egraph[subst[f2]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::ReduceFunc(func_name) = node {
+                sum_pattern.is_match(func_name)
+            } else {
+                false
+            }
+        });
+
+        let f3_matches = egraph[subst[f3]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::BroadcastFunc(func_name) = node {
+                div_pattern.is_match(func_name)
+            } else {
+                false
+            }
+        });
+
+        f1_matches && f2_matches && f3_matches
     }
 }

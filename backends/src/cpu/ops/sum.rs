@@ -2,10 +2,11 @@ use crate::cpu::CpuBackend;
 use core::{
     Layout,
     backends::{ops::Sum, reduce::ReduceFunc},
-    numeric::Zero,
 };
+use num_traits::Zero;
 use storage::cpu::{CpuDtype, CpuStorage};
 
+#[derive(Debug)]
 pub struct CpuSum;
 
 impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U>

@@ -1,18 +1,18 @@
 use core::{
     Layout,
-    backends::{broadcast::BroadcastFunc, ops::Multiply},
+    backends::{broadcast::BroadcastFunc, ops::Divide},
 };
 use num_traits::Zero;
-use std::ops::Mul;
+use std::ops::Div;
 use storage::cpu::{CpuDtype, CpuStorage};
 
 use crate::cpu::CpuBackend;
 
 #[derive(Debug)]
-pub struct CpuMultiply;
+pub struct CpuDivide;
 
-impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
-    BroadcastFunc<CpuStorage<U>, CpuStorage<U>, CpuStorage<U>, U, U, U> for CpuMultiply
+impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Div + Div<Output = U>>
+    BroadcastFunc<CpuStorage<U>, CpuStorage<U>, CpuStorage<U>, U, U, U> for CpuDivide
 {
     fn call(
         &self,
@@ -22,9 +22,9 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
         rhs_storage: &CpuStorage<U>,
         corresponding_dims: &[(i32, i32)],
     ) -> CpuStorage<U> {
-        let ucorresponding_dims = rhs_layout
+        let ucorresponding_dims = lhs_layout
             .signed_corresponding_dimensions_to_unsigned_corresponding_dimensions(
-                lhs_layout,
+                rhs_layout,
                 corresponding_dims,
             );
 
@@ -97,7 +97,7 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
             let rhs_flat_idx = rhs_layout.ravel_index(&rhs_indices);
 
             *output_elem =
-                lhs_storage.data[lhs_flat_idx].clone() * rhs_storage.data[rhs_flat_idx].clone();
+                lhs_storage.data[lhs_flat_idx].clone() / rhs_storage.data[rhs_flat_idx].clone();
         }
 
         CpuStorage { data: output_data }
@@ -105,7 +105,7 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
 
     fn as_str(&self) -> String {
         format!(
-            "CpuMultiply({}, {} -> {})",
+            "CpuDivide({}, {} -> {})",
             std::any::type_name::<CpuStorage<U>>(),
             std::any::type_name::<CpuStorage<U>>(),
             std::any::type_name::<CpuStorage<U>>()
@@ -113,12 +113,12 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
     }
 }
 
-impl Default for CpuMultiply {
+impl Default for CpuDivide {
     fn default() -> Self {
-        CpuMultiply
+        CpuDivide
     }
 }
 
-impl Multiply for CpuBackend {
-    type Multiply = CpuMultiply;
+impl Divide for CpuBackend {
+    type Divide = CpuDivide;
 }

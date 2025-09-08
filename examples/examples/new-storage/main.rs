@@ -1,5 +1,3 @@
-use macros::BackendOps;
-
 use core::{
     Layout,
     backends::{
@@ -7,10 +5,11 @@ use core::{
         map::{Map, MapFunc},
         ops::Relu,
     },
-    numeric::Zero,
     storage::Storage,
     tensor::{LazyTensor, Tensor},
 };
+use macros::BackendOps;
+use num_traits::Zero;
 
 pub trait MyNewDtype: Clone {}
 
@@ -54,6 +53,7 @@ impl LazyBackend for MyNewBackend {
     }
 }
 
+#[derive(Debug)]
 pub struct MyNewBackendRelu;
 
 impl<U: MyNewDtype + Zero + std::cmp::PartialOrd> MapFunc<MyNewStorage<U>, MyNewStorage<U>, U, U>

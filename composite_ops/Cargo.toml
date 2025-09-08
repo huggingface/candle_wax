@@ -6,4 +6,3 @@ edition.workspace = true
 [dependencies]
 core = { workspace = true }
 storage = { workspace = true }
-backends = { workspace = true }

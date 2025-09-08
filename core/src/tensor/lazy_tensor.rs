@@ -5,6 +5,7 @@ use crate::backends::{map::MapFunc, reduce::ReduceFunc};
 use crate::storage::Storage;
 use crate::tensor::Tensor;
 
+#[derive(Clone, Debug)]
 pub enum LazyTensor<S: Storage> {
     Tensor(Arc<Tensor<S>>),
     Map {

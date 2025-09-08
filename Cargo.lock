@@ -27,9 +27,11 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 name = "backends"
 version = "0.1.0"
 dependencies = [
+ "composite_ops",
  "core",
  "egg",
  "macros",
+ "num-traits",
  "regex",
  "storage",
 ]
@@ -56,7 +58,6 @@ checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 name = "composite_ops"
 version = "0.1.0"
 dependencies = [
- "backends",
  "core",
  "storage",
 ]
@@ -114,6 +115,7 @@ dependencies = [
  "backends",
  "core",
  "macros",
+ "num-traits",
  "storage",
 ]
 

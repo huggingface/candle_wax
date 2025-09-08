@@ -1,5 +1,3 @@
-pub mod numeric;
-
 mod layout;
 pub use layout::Layout;
 

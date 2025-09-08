@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{backends::Backend, layout::Layout, storage::Storage};
 pub trait Broadcast<B, R, S, T, U, V, W, F>
 where
@@ -17,7 +19,7 @@ where
     ) -> T;
 }
 
-pub trait BroadcastFunc<R, S, T, U, V, W>
+pub trait BroadcastFunc<R, S, T, U, V, W>: Debug
 where
     R: Storage<Inner = U>,
     S: Storage<Inner = V>,

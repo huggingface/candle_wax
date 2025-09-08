@@ -131,9 +131,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
     ) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError> {
         let extractor = Extractor::new(&self.egraph, cost_func);
         let eval_id = self.eval_node_id.ok_or(CpuBackendError::NoEvaluationId)?;
-        let (cost, best_expr) = extractor.find_best(eval_id);
-
-        println!("Best expression cost: {:?}", cost);
+        let (_cost, best_expr) = extractor.find_best(eval_id);
         let root = best_expr.last().ok_or(CpuBackendError::EmptyExpression)?;
         self.executor.execute_node(root, &best_expr, self)
     }

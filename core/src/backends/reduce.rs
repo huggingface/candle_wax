@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{backends::Backend, layout::Layout, storage::Storage};
 
 pub trait Reduce<B, S, T, U, V, F>
@@ -10,7 +12,7 @@ where
     fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T;
 }
 
-pub trait ReduceFunc<S, T, U, V>
+pub trait ReduceFunc<S, T, U, V>: Debug
 where
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,

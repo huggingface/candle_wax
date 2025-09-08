@@ -1,11 +1,13 @@
-use crate::cpu::CpuBackend;
 use core::{
     Layout,
     backends::{map::MapFunc, ops::Relu},
-    numeric::Zero,
 };
+use num_traits::Zero;
 use storage::cpu::{CpuDtype, CpuStorage};
 
+use crate::cpu::CpuBackend;
+
+#[derive(Debug)]
 pub struct CpuRelu;
 
 impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>

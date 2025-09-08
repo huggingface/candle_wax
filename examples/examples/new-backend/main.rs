@@ -7,10 +7,10 @@ use core::{
         map::{Map, MapFunc},
         ops::Relu,
     },
-    numeric::Zero,
     storage::Storage,
     tensor::{LazyTensor, Tensor},
 };
+use num_traits::Zero;
 use storage::cpu::{CpuDtype, CpuStorage};
 
 #[derive(BackendOps)]
@@ -42,6 +42,7 @@ impl LazyBackend for MyNewBackend {
     }
 }
 
+#[derive(Debug)]
 pub struct MyNewBackendRelu;
 
 impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>

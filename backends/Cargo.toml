@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+num-traits = { workspace = true }
 egg = { workspace = true }
 macros = { workspace = true }
 core = { workspace = true }
 storage = { workspace = true }
 regex = {workspace = true}
+composite_ops = {workspace = true}
