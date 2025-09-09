@@ -27,14 +27,14 @@ impl LazyBackend for MyNewBackend {
                 let new_tensor = Self::eval(*input);
                 Tensor::new(
                     new_tensor.layout.clone(),
-                    func.call(&new_tensor.layout, &new_tensor.storage),
+                    func.forward(&new_tensor.layout, &new_tensor.storage),
                 )
             }
             LazyTensor::Reduce { input, dim, func } => {
                 let new_tensor = Self::eval(*input);
                 Tensor::new(
                     new_tensor.layout.clone(),
-                    func.call(&new_tensor.layout, &new_tensor.storage, dim),
+                    func.forward(&new_tensor.layout, &new_tensor.storage, dim),
                 )
             }
             _ => panic!("Unsupported operation in MyNewBackend"),
@@ -48,7 +48,7 @@ pub struct MyNewBackendRelu;
 impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for MyNewBackendRelu
 {
-    fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
+    fn forward(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
         let transformed_data: Vec<U> = storage
             .data
             .iter()

@@ -13,7 +13,7 @@ pub struct CpuExp;
 impl<U: CpuDtype + Real + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for CpuExp
 {
-    fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
+    fn forward(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
         let transformed_data: Vec<U> = storage.data.iter().map(|x| x.exp()).collect();
 
         CpuStorage {

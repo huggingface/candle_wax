@@ -14,7 +14,7 @@ pub struct CpuMultiply;
 impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Mul + Mul<Output = U>>
     BroadcastFunc<CpuStorage<U>, CpuStorage<U>, CpuStorage<U>, U, U, U> for CpuMultiply
 {
-    fn call(
+    fn forward(
         &self,
         lhs_layout: &Layout,
         lhs_storage: &CpuStorage<U>,

@@ -25,7 +25,7 @@ where
     S: Storage<Inner = V>,
     T: Storage<Inner = W>,
 {
-    fn call(
+    fn forward(
         &self,
         lhs_layout: &Layout,
         lhs_storage: &R,

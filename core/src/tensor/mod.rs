@@ -27,7 +27,7 @@ impl<S: Storage> Tensor<S> {
         F: MapFunc<S, R, S::Inner, R::Inner>,
         B: Backend + Map<B, S, R, S::Inner, R::Inner, F>,
     {
-        Tensor::new(self.layout.clone(), f.call(&self.layout, &self.storage))
+        Tensor::new(self.layout.clone(), f.forward(&self.layout, &self.storage))
     }
 
     pub fn reduce<B, F, R>(self, dim: i32, f: F) -> Tensor<R>
@@ -39,7 +39,7 @@ impl<S: Storage> Tensor<S> {
         Tensor::new(
             self.layout
                 .reduce(self.layout.signed_dim_to_unsigned_dim(dim)),
-            f.call(&self.layout, &self.storage, dim),
+            f.forward(&self.layout, &self.storage, dim),
         )
     }
 
@@ -65,7 +65,7 @@ impl<S: Storage> Tensor<S> {
                         corresponding_dimensions,
                     ),
             ),
-            f.call(
+            f.forward(
                 &self.layout,
                 &self.storage,
                 &other.layout,

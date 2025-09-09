@@ -27,8 +27,6 @@ impl CostFunction<CpuBackendLanguage> for CpuBackendCost {
             CpuBackendLanguage::Broadcast(args) => costs(args[0]) + costs(args[1]) + 25,
 
             // Fused operations (more efficient)
-            CpuBackendLanguage::FusedMapReduce(args) => costs(args[0]) + 20,
-            CpuBackendLanguage::FusedReduceMap(args) => costs(args[0]) + 20,
             CpuBackendLanguage::FusedMatmul(args) => costs(args[0]) + costs(args[1]) + 30,
             CpuBackendLanguage::FusedSoftmax(args) => costs(args[0]) + 30,
 

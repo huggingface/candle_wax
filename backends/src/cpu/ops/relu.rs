@@ -13,7 +13,7 @@ pub struct CpuRelu;
 impl<U: CpuDtype + Zero + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for CpuRelu
 {
-    fn call(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
+    fn forward(&self, _layout: &Layout, storage: &CpuStorage<U>) -> CpuStorage<U> {
         let transformed_data: Vec<U> = storage
             .data
             .iter()

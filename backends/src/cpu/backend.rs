@@ -116,7 +116,7 @@ impl<S: Storage> CpuExpressionBuilder<S> {
         func: Arc<dyn ReduceFunc<S, S, <S as Storage>::Inner, <S as Storage>::Inner>>,
     ) -> Id {
         let input_id = self.build_expression(input);
-        self.context.add_reduce(input_id, dim, func)
+        self.context.add_reduce(input_id, func, dim)
     }
 
     fn build_broadcast_expr(
@@ -138,7 +138,7 @@ impl<S: Storage> CpuExpressionBuilder<S> {
         let lhs_id = self.build_expression(lhs_input);
         let rhs_id = self.build_expression(rhs_input);
         self.context
-            .add_broadcast(lhs_id, rhs_id, corresponding_dimensions, func)
+            .add_broadcast(lhs_id, rhs_id, func, corresponding_dimensions)
     }
 }
 

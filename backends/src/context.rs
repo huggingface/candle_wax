@@ -31,7 +31,6 @@ pub trait BackendContext: Default {
     fn add_reduce(
         &mut self,
         input: Id,
-        dim: i32,
         func: Arc<
             dyn ReduceFunc<
                     Self::BackendStorage,
@@ -40,13 +39,13 @@ pub trait BackendContext: Default {
                     <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
+        dim: i32,
     ) -> Id;
 
     fn add_broadcast(
         &mut self,
         lhs_input: Id,
         rhs_input: Id,
-        corresponding_dimensions: Vec<(i32, i32)>,
         func: Arc<
             dyn BroadcastFunc<
                     Self::BackendStorage,
@@ -57,6 +56,7 @@ pub trait BackendContext: Default {
                     <Self::BackendStorage as Storage>::Inner,
                 >,
         >,
+        corresponding_dimensions: Vec<(i32, i32)>,
     ) -> Id;
 
     fn add_rewrites(&mut self, rewrites: &[Rewrite<Self::BackendLanguage, ()>]);

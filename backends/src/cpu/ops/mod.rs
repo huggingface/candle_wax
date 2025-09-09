@@ -5,3 +5,5 @@ pub mod sum;
 
 pub mod divide;
 pub mod multiply;
+
+pub mod matmul;

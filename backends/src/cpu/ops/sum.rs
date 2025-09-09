@@ -12,7 +12,7 @@ pub struct CpuSum;
 impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, CpuStorage<U>, U, U>
     for CpuSum
 {
-    fn call(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {
+    fn forward(&self, layout: &Layout, storage: &CpuStorage<U>, dim: i32) -> CpuStorage<U> {
         let udim = layout.signed_dim_to_unsigned_dim(dim);
         let output_layout = layout.reduce(udim);
 

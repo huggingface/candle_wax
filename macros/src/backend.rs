@@ -60,7 +60,7 @@ pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2
                 F: #op_func_ident<S, T, U, V>,
             {
                 fn map(layout: &Layout, storage: &S, f: F) -> T {
-                    f.call(&layout, &storage)
+                    f.forward(&layout, &storage)
                 }
             }
         },
@@ -73,7 +73,7 @@ pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2
                 F: #op_func_ident<S, T, U, V>,
             {
                 fn reduce(layout: &Layout, storage: &S, dim: i32, f: F) -> T {
-                    f.call(&layout, &storage, dim)
+                    f.forward(&layout, &storage, dim)
                 }
             }
         },
@@ -87,7 +87,7 @@ pub fn generate_op_impl(backend_name: &syn::Ident, op_type: &str) -> proc_macro2
                 F: #op_func_ident<R, S, T, U, V, W>,
             {
                 fn broadcast(lhs_layout: &Layout, lhs_storage: &R, rhs_layout: &Layout, rhs_storage: &S, corresponding_dims: &[(i32, i32)], f: F) -> T{
-                    f.call(lhs_layout, lhs_storage, rhs_layout, rhs_storage, corresponding_dims)
+                    f.forward(lhs_layout, lhs_storage, rhs_layout, rhs_storage, corresponding_dims)
                 }
             }
         },

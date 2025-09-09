@@ -17,7 +17,7 @@ where
     S: Storage<Inner = U>,
     T: Storage<Inner = V>,
 {
-    fn call(&self, layout: &Layout, storage: &S, dim: i32) -> T;
+    fn forward(&self, layout: &Layout, storage: &S, dim: i32) -> T;
 
     fn as_str(&self) -> String;
 }
