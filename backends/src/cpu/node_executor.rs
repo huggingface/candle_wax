@@ -53,6 +53,7 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
             }
 
             CpuBackendLanguage::FusedMatmul([lhs_id, rhs_id]) => {
+                println!("Executing FusedMatmul");
                 let context_ptr = context as *const _ as *const u8;
 
                 unsafe {
@@ -71,6 +72,7 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
             }
 
             CpuBackendLanguage::FusedSoftmax([input_id]) => {
+                println!("Executing FusedSoftmax");
                 let context_ptr = context as *const _ as *const u8;
 
                 unsafe {
