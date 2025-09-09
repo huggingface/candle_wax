@@ -7,7 +7,6 @@ use core::{
 use egg::Id;
 use num_traits::{Zero, real::Real};
 use std::{
-    any::Any,
     ops::{AddAssign, Mul},
     sync::Arc,
 };
@@ -17,7 +16,7 @@ use crate::{
     cpu::ops::{
         divide::CpuDivide,
         exp::CpuExp,
-        matmul::{self, CpuMatmul, Matmul},
+        matmul::{CpuMatmul, Matmul},
         sum::CpuSum,
     },
     node_executor::EggNodeExecutor,
@@ -263,7 +262,7 @@ impl CpuExecutor {
         );
 
         let lhs_udim_i = lhs_input.layout.signed_dim_to_unsigned_dim(-2);
-        let lhs_udim_j = lhs_input.layout.signed_dim_to_unsigned_dim(-1);
+        // let lhs_udim_j = lhs_input.layout.signed_dim_to_unsigned_dim(-1);
         let rhs_udim_j = rhs_input.layout.signed_dim_to_unsigned_dim(-2);
         let rhs_udim_k = rhs_input.layout.signed_dim_to_unsigned_dim(-1);
 
