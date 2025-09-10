@@ -61,10 +61,12 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
                         let cpu_context =
                             &*(context_ptr as *const CpuBackendContext<CpuStorage<f32>>);
                         self.execute_fused_matmul(*lhs_id, *rhs_id, expr, cpu_context)
-                    }) {
-                        if let Ok(result) = result {
-                            return Ok(std::mem::transmute(result));
-                        }
+                    }) && let Ok(result) = result
+                    {
+                        return Ok(std::mem::transmute::<
+                            std::sync::Arc<core::tensor::Tensor<storage::cpu::CpuStorage<f32>>>,
+                            std::sync::Arc<core::tensor::Tensor<S>>,
+                        >(result));
                     }
 
                     panic!("FusedMatmul failed for all CpuDtype variants");
@@ -80,10 +82,12 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
                         let cpu_context =
                             &*(context_ptr as *const CpuBackendContext<CpuStorage<f32>>);
                         self.execute_fused_softmax(*input_id, expr, cpu_context)
-                    }) {
-                        if let Ok(result) = result {
-                            return Ok(std::mem::transmute(result));
-                        }
+                    }) && let Ok(result) = result
+                    {
+                        return Ok(std::mem::transmute::<
+                            std::sync::Arc<core::tensor::Tensor<storage::cpu::CpuStorage<f32>>>,
+                            std::sync::Arc<core::tensor::Tensor<S>>,
+                        >(result));
                     }
 
                     panic!("FusedSoftmax failed for all CpuDtype variants");
