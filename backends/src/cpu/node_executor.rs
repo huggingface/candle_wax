@@ -36,9 +36,9 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
         match node {
             CpuBackendLanguage::Tensor(tensor_id) => context
                 .tensors
-                .get(&tensor_id.id.into())
+                .get(&tensor_id.id)
                 .cloned()
-                .ok_or(CpuBackendError::TensorNotFound(tensor_id.id.into())),
+                .ok_or(CpuBackendError::TensorNotFound(tensor_id.id)),
 
             CpuBackendLanguage::Map([input_id, func_id]) => {
                 self.execute_map(*input_id, *func_id, expr, context)
@@ -124,7 +124,7 @@ impl CpuExecutor {
 
         let func = context
             .map_funcs
-            .get(&func_lookup.id.into())
+            .get(&func_lookup.id)
             .cloned()
             .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 
@@ -166,7 +166,7 @@ impl CpuExecutor {
 
         let func = context
             .reduce_funcs
-            .get(&func_lookup.id.into())
+            .get(&func_lookup.id)
             .cloned()
             .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 
@@ -214,7 +214,7 @@ impl CpuExecutor {
 
         let func = context
             .broadcast_funcs
-            .get(&func_lookup.id.into())
+            .get(&func_lookup.id)
             .cloned()
             .ok_or_else(|| CpuBackendError::FunctionNotFound(func_lookup.to_string()))?;
 

@@ -2,7 +2,7 @@ use core::{
     Layout,
     backends::{
         Backend, LazyBackend,
-        broadcast::{Broadcast, BroadcastFunc},
+        broadcast::{Broadcast, BroadcastFunc, BroadcastFuncSame},
         map::{Map, MapFunc},
         reduce::{Reduce, ReduceFunc},
     },
@@ -78,15 +78,16 @@ impl<S: Storage> CpuExpressionBuilder<S> {
     fn build_expression(&mut self, tensor: &LazyTensor<S>) -> Id {
         match tensor {
             LazyTensor::Tensor(t) => self.build_tensor_expr(t.clone()),
-            LazyTensor::Map { input, func } => self.build_map_expr(input, func.clone()),
-            LazyTensor::Reduce { input, dim, func } => {
-                self.build_reduce_expr(input, *dim, func.clone())
-            }
+            LazyTensor::Map { input, func, .. } => self.build_map_expr(input, func.clone()),
+            LazyTensor::Reduce {
+                input, dim, func, ..
+            } => self.build_reduce_expr(input, *dim, func.clone()),
             LazyTensor::Broadcast {
                 lhs_input,
                 rhs_input,
                 corresponding_dimensions,
                 func,
+                ..
             } => self.build_broadcast_expr(
                 lhs_input,
                 rhs_input,
@@ -124,16 +125,7 @@ impl<S: Storage> CpuExpressionBuilder<S> {
         lhs_input: &LazyTensor<S>,
         rhs_input: &LazyTensor<S>,
         corresponding_dimensions: Vec<(i32, i32)>,
-        func: Arc<
-            dyn BroadcastFunc<
-                    S,
-                    S,
-                    S,
-                    <S as Storage>::Inner,
-                    <S as Storage>::Inner,
-                    <S as Storage>::Inner,
-                >,
-        >,
+        func: Arc<BroadcastFuncSame<S>>,
     ) -> Id {
         let lhs_id = self.build_expression(lhs_input);
         let rhs_id = self.build_expression(rhs_input);

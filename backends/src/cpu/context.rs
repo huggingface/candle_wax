@@ -1,5 +1,5 @@
 use core::{
-    backends::{broadcast::BroadcastFunc, map::MapFunc, reduce::ReduceFunc},
+    backends::{broadcast::BroadcastFuncSame, map::MapFuncSame, reduce::ReduceFuncSame},
     storage::Storage,
     tensor::Tensor,
 };
@@ -16,10 +16,9 @@ use super::{backend::CpuBackendError, language::CpuBackendLanguage, node_executo
 
 pub struct CpuBackendContext<S: Storage> {
     pub tensors: HashMap<usize, Arc<Tensor<S>>>,
-    pub map_funcs: HashMap<usize, Arc<dyn MapFunc<S, S, S::Inner, S::Inner>>>,
-    pub reduce_funcs: HashMap<usize, Arc<dyn ReduceFunc<S, S, S::Inner, S::Inner>>>,
-    pub broadcast_funcs:
-        HashMap<usize, Arc<dyn BroadcastFunc<S, S, S, S::Inner, S::Inner, S::Inner>>>,
+    pub map_funcs: HashMap<usize, Arc<MapFuncSame<S>>>,
+    pub reduce_funcs: HashMap<usize, Arc<ReduceFuncSame<S>>>,
+    pub broadcast_funcs: HashMap<usize, Arc<BroadcastFuncSame<S>>>,
 
     pub egraph: EGraph<CpuBackendLanguage, ()>,
     pub eval_node_id: Option<Id>,
@@ -47,18 +46,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         }))
     }
 
-    fn add_map(
-        &mut self,
-        input: Id,
-        func: Arc<
-            dyn MapFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
-    ) -> Id {
+    fn add_map(&mut self, input: Id, func: Arc<MapFuncSame<Self::BackendStorage>>) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;
         let func_name = func.as_str();
         self.map_funcs.insert(func_id, func);
@@ -73,14 +61,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
     fn add_reduce(
         &mut self,
         input: Id,
-        func: Arc<
-            dyn ReduceFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
+        func: Arc<ReduceFuncSame<Self::BackendStorage>>,
         dim: i32,
     ) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;
@@ -101,16 +82,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         &mut self,
         lhs_input: Id,
         rhs_input: Id,
-        func: Arc<
-            dyn BroadcastFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
+        func: Arc<BroadcastFuncSame<Self::BackendStorage>>,
         corresponding_dimensions: Vec<(i32, i32)>,
     ) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;

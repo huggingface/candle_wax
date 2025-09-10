@@ -61,8 +61,8 @@ impl<
                 rhs_indices.push(*output_idx);
             }
 
-            let i_idx = (&mut out_iter).next().unwrap();
-            let k_idx = (&mut out_iter).next().unwrap();
+            let i_idx = out_iter.next().unwrap();
+            let k_idx = out_iter.next().unwrap();
 
             for j_idx in 0..reduced_size {
                 lhs_indices.push(*i_idx);

@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use crate::{backends::Backend, layout::Layout, storage::Storage};
 
+pub type MapFuncSame<S> = dyn MapFunc<S, S, <S as Storage>::Inner, <S as Storage>::Inner>;
+
 pub trait Map<B, S, T, U, V, F>
 where
     B: Backend,

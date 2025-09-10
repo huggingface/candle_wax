@@ -1,6 +1,10 @@
 use std::fmt::Debug;
 
 use crate::{backends::Backend, layout::Layout, storage::Storage};
+
+pub type BroadcastFuncSame<S> =
+    dyn BroadcastFunc<S, S, S, <S as Storage>::Inner, <S as Storage>::Inner, <S as Storage>::Inner>;
+
 pub trait Broadcast<B, R, S, T, U, V, W, F>
 where
     B: Backend,

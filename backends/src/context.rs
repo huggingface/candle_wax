@@ -1,5 +1,5 @@
 use core::{
-    backends::{broadcast::BroadcastFunc, map::MapFunc, reduce::ReduceFunc},
+    backends::{broadcast::BroadcastFuncSame, map::MapFuncSame, reduce::ReduceFuncSame},
     storage::Storage,
     tensor::Tensor,
 };
@@ -15,30 +15,12 @@ pub trait BackendContext: Default {
 
     fn add_tensor(&mut self, tensor: Arc<Tensor<Self::BackendStorage>>) -> Id;
 
-    fn add_map(
-        &mut self,
-        input: Id,
-        func: Arc<
-            dyn MapFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
-    ) -> Id;
+    fn add_map(&mut self, input: Id, func: Arc<MapFuncSame<Self::BackendStorage>>) -> Id;
 
     fn add_reduce(
         &mut self,
         input: Id,
-        func: Arc<
-            dyn ReduceFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
+        func: Arc<ReduceFuncSame<Self::BackendStorage>>,
         dim: i32,
     ) -> Id;
 
@@ -46,16 +28,7 @@ pub trait BackendContext: Default {
         &mut self,
         lhs_input: Id,
         rhs_input: Id,
-        func: Arc<
-            dyn BroadcastFunc<
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    Self::BackendStorage,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                    <Self::BackendStorage as Storage>::Inner,
-                >,
-        >,
+        func: Arc<BroadcastFuncSame<Self::BackendStorage>>,
         corresponding_dimensions: Vec<(i32, i32)>,
     ) -> Id;
 

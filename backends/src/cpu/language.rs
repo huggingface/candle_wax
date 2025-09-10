@@ -26,12 +26,12 @@ impl FromStr for CorrespondingDims {
             r"\[\s*(\(\s*-?\d+\s*,\s*-?\d+\s*\)\s*,\s*)*(\(\s*-?\d+\s*,\s*-?\d+\s*\))\s*\]",
         )
         .unwrap();
+        let inner_re = Regex::new(r"\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)").unwrap();
         if let Some(cap) = re.captures(s) {
             let mut dims = Vec::new();
             for i in 1..cap.len() {
                 let dim = cap[i].to_string();
-                let re = Regex::new(r"\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)").unwrap();
-                if let Some(dim_cap) = re.captures(&dim) {
+                if let Some(dim_cap) = inner_re.captures(&dim) {
                     let id1 = dim_cap[1].parse::<i32>().unwrap();
                     let id2 = dim_cap[2].parse::<i32>().unwrap();
                     dims.push((id1, id2));
