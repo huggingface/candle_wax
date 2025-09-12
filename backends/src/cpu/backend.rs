@@ -39,7 +39,9 @@ pub struct CpuBackend {}
 impl Backend for CpuBackend {}
 
 impl LazyBackend for CpuBackend {
-    fn eval<S: Storage>(tensor: LazyTensor<S>) -> Tensor<S> {
+    type LazyBackendError = CpuBackendError;
+
+    fn eval<S: Storage>(tensor: LazyTensor<S>) -> Result<Tensor<S>, CpuBackendError> {
         let mut context = CpuBackendContext::from(tensor);
 
         context.eval_node_id = Some(
@@ -51,9 +53,14 @@ impl LazyBackend for CpuBackend {
         context.add_rewrites(&rewrites());
         context.optimize();
 
-        match context.evaluate(CpuBackendCost) {
-            Ok(result) => result.as_ref().clone(),
-            Err(e) => panic!("CPU Backend evaluation failed: {:?}", e),
+        match context.evaluate(
+            CpuBackendCost,
+            context
+                .eval_node_id
+                .ok_or(CpuBackendError::NoEvaluationId)?,
+        ) {
+            Ok(result) => Ok(result.as_ref().clone()),
+            Err(e) => Err(e),
         }
     }
 }

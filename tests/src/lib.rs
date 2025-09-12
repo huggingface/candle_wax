@@ -76,7 +76,7 @@ mod tests {
         let tensor = LazyTensor::from(tensor);
         let tensor = tensor.reduce(2, <CpuBackend as Sum>::as_arc());
         let tensor = tensor.map(<CpuBackend as Relu>::as_arc());
-        let result = CpuBackend::eval(tensor);
+        let result = CpuBackend::eval(tensor).unwrap();
         assert_eq!(result.storage.data, vec![3.0, 0.0, 11.0, 0.0]);
     }
 
@@ -100,7 +100,7 @@ mod tests {
         let tensor_b = LazyTensor::from(tensor_b);
         let tensor = tensor_a.broadcast(tensor_b, vec![(1, 0)], <CpuBackend as Multiply>::as_arc());
         let tensor = tensor.reduce(1, <CpuBackend as Sum>::as_arc());
-        let result = CpuBackend::eval(tensor);
+        let result = CpuBackend::eval(tensor).unwrap();
 
         assert_eq!(result.layout.shape, &[2, 2]);
         assert_eq!(result.storage.data, vec![22.0, 28.0, 49.0, 64.0]);
@@ -138,7 +138,7 @@ mod composite_ops_tests {
         let tensor_a = LazyTensor::from(tensor_a);
         let tensor_b = LazyTensor::from(tensor_b);
         let tensor = tensor_a.matmul::<CpuBackend>(tensor_b);
-        let result = CpuBackend::eval(tensor);
+        let result = CpuBackend::eval(tensor).unwrap();
 
         assert_eq!(result.layout.shape, &[2, 2]);
         assert_eq!(result.storage.data, vec![22.0, 28.0, 49.0, 64.0]);
@@ -155,7 +155,7 @@ mod composite_ops_tests {
 
         let tensor_a = LazyTensor::from(tensor_a);
         let tensor = tensor_a.softmax::<CpuBackend>();
-        let result = CpuBackend::eval(tensor);
+        let result = CpuBackend::eval(tensor).unwrap();
 
         assert_eq!(result.layout.shape, &[2, 3]);
         assert_eq!(

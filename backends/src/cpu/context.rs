@@ -32,11 +32,36 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
     type BackendError = CpuBackendError;
     type BackendLanguage = CpuBackendLanguage;
 
-    fn set_eval_node_id(&mut self, id: Id) {
+    fn add_rewrites(&mut self, other: &[Rewrite<CpuBackendLanguage, ()>]) {
+        self.rewrites.extend_from_slice(other);
+    }
+
+    fn optimize(&mut self) {
+        let runner = Runner::default()
+            .with_egraph(std::mem::take(&mut self.egraph))
+            .run(&self.rewrites);
+
+        self.egraph = runner.egraph;
+    }
+
+    fn evaluate<C: CostFunction<Self::BackendLanguage>>(
+        &mut self,
+        cost_func: C,
+        node_id: Id,
+    ) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError> {
+        let extractor = Extractor::new(&self.egraph, cost_func);
+        let (_cost, best_expr) = extractor.find_best(node_id);
+        let root = best_expr.last().ok_or(CpuBackendError::EmptyExpression)?;
+        self.executor.execute_node(root, &best_expr, self)
+    }
+}
+
+impl<S: Storage> CpuBackendContext<S> {
+    pub fn set_eval_node_id(&mut self, id: Id) {
         self.eval_node_id = Some(id);
     }
 
-    fn add_tensor(&mut self, tensor: Arc<Tensor<Self::BackendStorage>>) -> Id {
+    pub fn add_tensor(&mut self, tensor: Arc<Tensor<S>>) -> Id {
         let tensor_id = Arc::as_ptr(&tensor) as usize;
         let tensor_shape = tensor.layout.shape.clone();
         self.tensors.insert(tensor_id, tensor);
@@ -46,7 +71,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
         }))
     }
 
-    fn add_map(&mut self, input: Id, func: Arc<MapFuncSame<Self::BackendStorage>>) -> Id {
+    pub fn add_map(&mut self, input: Id, func: Arc<MapFuncSame<S>>) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;
         let func_name = func.as_str();
         self.map_funcs.insert(func_id, func);
@@ -58,12 +83,7 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
             .add(CpuBackendLanguage::Map([input, graph_func_id]))
     }
 
-    fn add_reduce(
-        &mut self,
-        input: Id,
-        func: Arc<ReduceFuncSame<Self::BackendStorage>>,
-        dim: i32,
-    ) -> Id {
+    pub fn add_reduce(&mut self, input: Id, func: Arc<ReduceFuncSame<S>>, dim: i32) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;
         let func_name = func.as_str();
         self.reduce_funcs.insert(func_id, func);
@@ -78,11 +98,11 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
             .add(CpuBackendLanguage::Reduce([input, graph_func_id, dim_id]))
     }
 
-    fn add_broadcast(
+    pub fn add_broadcast(
         &mut self,
         lhs_input: Id,
         rhs_input: Id,
-        func: Arc<BroadcastFuncSame<Self::BackendStorage>>,
+        func: Arc<BroadcastFuncSame<S>>,
         corresponding_dimensions: Vec<(i32, i32)>,
     ) -> Id {
         let func_id = Arc::as_ptr(&func) as *const () as usize;
@@ -103,29 +123,6 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
             graph_func_id,
             corr_dims_id,
         ]))
-    }
-
-    fn add_rewrites(&mut self, other: &[Rewrite<CpuBackendLanguage, ()>]) {
-        self.rewrites.extend_from_slice(other);
-    }
-
-    fn optimize(&mut self) {
-        let runner = Runner::default()
-            .with_egraph(std::mem::take(&mut self.egraph))
-            .run(&self.rewrites);
-
-        self.egraph = runner.egraph;
-    }
-
-    fn evaluate<C: CostFunction<Self::BackendLanguage>>(
-        &mut self,
-        cost_func: C,
-    ) -> Result<Arc<Tensor<Self::BackendStorage>>, Self::BackendError> {
-        let extractor = Extractor::new(&self.egraph, cost_func);
-        let eval_id = self.eval_node_id.ok_or(CpuBackendError::NoEvaluationId)?;
-        let (_cost, best_expr) = extractor.find_best(eval_id);
-        let root = best_expr.last().ok_or(CpuBackendError::EmptyExpression)?;
-        self.executor.execute_node(root, &best_expr, self)
     }
 }
 

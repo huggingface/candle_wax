@@ -31,24 +31,25 @@ struct MyNewBackend {}
 impl Backend for MyNewBackend {}
 
 impl LazyBackend for MyNewBackend {
-    fn eval<S: Storage>(tensor: LazyTensor<S>) -> Tensor<S> {
+    type LazyBackendError = ();
+    fn eval<S: Storage>(tensor: LazyTensor<S>) -> Result<Tensor<S>, Self::LazyBackendError> {
         match tensor {
-            LazyTensor::Tensor(t) => t.as_ref().clone(),
+            LazyTensor::Tensor(t) => Ok(t.as_ref().clone()),
             LazyTensor::Map { input, func, .. } => {
-                let new_tensor = Self::eval(*input);
-                Tensor::new(
+                let new_tensor = Self::eval(*input)?;
+                Ok(Tensor::new(
                     new_tensor.layout.clone(),
                     func.forward(&new_tensor.layout, &new_tensor.storage),
-                )
+                ))
             }
             LazyTensor::Reduce {
                 input, dim, func, ..
             } => {
-                let new_tensor = Self::eval(*input);
-                Tensor::new(
+                let new_tensor = Self::eval(*input)?;
+                Ok(Tensor::new(
                     new_tensor.layout.clone(),
                     func.forward(&new_tensor.layout, &new_tensor.storage, dim),
-                )
+                ))
             }
             _ => panic!("Unsupported operation in MyNewBackend"),
         }
