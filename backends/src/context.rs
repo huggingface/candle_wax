@@ -129,15 +129,15 @@ impl<S: Storage> CoreContextBulder<S> {
         let tensor_ref_id = self.context.egraph.add(tensor_ref.clone());
         self.context
             .history
-            .push((tensor_ref_id.clone(), tensor_ref));
+            .push((tensor_ref_id, tensor_ref));
 
         let shape = CoreLanguage::Shape((&tensor.layout).into());
         let shape_id = self.context.egraph.add(shape.clone());
-        self.context.history.push((shape_id.clone(), shape));
+        self.context.history.push((shape_id, shape));
 
         let tensor = CoreLanguage::Tensor([tensor_ref_id, shape_id]);
         let tensor_id = self.context.egraph.add(tensor.clone());
-        self.context.history.push((tensor_id.clone(), tensor));
+        self.context.history.push((tensor_id, tensor));
 
         tensor_id
     }
@@ -158,16 +158,16 @@ impl<S: Storage> CoreContextBulder<S> {
         });
 
         let graph_func_id = self.context.egraph.add(map_func.clone());
-        self.context.history.push((graph_func_id.clone(), map_func));
+        self.context.history.push((graph_func_id, map_func));
 
         let shape = CoreLanguage::Shape(layout.into());
         let shape_id = self.context.egraph.add(shape.clone());
-        self.context.history.push((shape_id.clone(), shape));
+        self.context.history.push((shape_id, shape));
 
         let map = CoreLanguage::Map([input_id, graph_func_id, shape_id]);
 
         let map_id = self.context.egraph.add(map.clone());
-        self.context.history.push((map_id.clone(), map));
+        self.context.history.push((map_id, map));
 
         map_id
     }
@@ -192,19 +192,19 @@ impl<S: Storage> CoreContextBulder<S> {
         let graph_func_id = self.context.egraph.add(reduce_func.clone());
         self.context
             .history
-            .push((graph_func_id.clone(), reduce_func));
+            .push((graph_func_id, reduce_func));
 
         let dim_node = CoreLanguage::Dim(dim);
         let dim_id = self.context.egraph.add(dim_node.clone());
-        self.context.history.push((dim_id.clone(), dim_node));
+        self.context.history.push((dim_id, dim_node));
 
         let shape = CoreLanguage::Shape(layout.into());
         let shape_id = self.context.egraph.add(shape.clone());
-        self.context.history.push((shape_id.clone(), shape));
+        self.context.history.push((shape_id, shape));
 
         let reduce = CoreLanguage::Reduce([input_id, graph_func_id, dim_id, shape_id]);
         let reduce_id = self.context.egraph.add(reduce.clone());
-        self.context.history.push((reduce_id.clone(), reduce));
+        self.context.history.push((reduce_id, reduce));
         reduce_id
     }
 
@@ -229,23 +229,23 @@ impl<S: Storage> CoreContextBulder<S> {
         let graph_func_id = self.context.egraph.add(broadcast_func.clone());
         self.context
             .history
-            .push((graph_func_id.clone(), broadcast_func));
+            .push((graph_func_id, broadcast_func));
 
         let corr_dims_node =
             CoreLanguage::CorrespondingDims(corresponding_dimensions.clone().into());
         let corr_dims_id = self.context.egraph.add(corr_dims_node.clone());
         self.context
             .history
-            .push((corr_dims_id.clone(), corr_dims_node));
+            .push((corr_dims_id, corr_dims_node));
 
         let shape = CoreLanguage::Shape(layout.into());
         let shape_id = self.context.egraph.add(shape.clone());
-        self.context.history.push((shape_id.clone(), shape));
+        self.context.history.push((shape_id, shape));
 
         let broadcast =
             CoreLanguage::Broadcast([lhs_id, rhs_id, graph_func_id, corr_dims_id, shape_id]);
         let broadcast_id = self.context.egraph.add(broadcast.clone());
-        self.context.history.push((broadcast_id.clone(), broadcast));
+        self.context.history.push((broadcast_id, broadcast));
 
         broadcast_id
     }
