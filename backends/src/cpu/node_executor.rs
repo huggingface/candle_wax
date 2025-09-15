@@ -38,15 +38,15 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
                 self.execute_tensor(*tensor_id, *shape_id, expr, context)
             }
 
-            CpuBackendLanguage::Map([input_id, func_id]) => {
+            CpuBackendLanguage::Map([input_id, func_id, ..]) => {
                 self.execute_map(*input_id, *func_id, expr, context)
             }
 
-            CpuBackendLanguage::Reduce([input_id, func_id, dim_id]) => {
+            CpuBackendLanguage::Reduce([input_id, func_id, dim_id, ..]) => {
                 self.execute_reduce(*input_id, *func_id, *dim_id, expr, context)
             }
 
-            CpuBackendLanguage::Broadcast([lhs_id, rhs_id, func_id, corrdims_id]) => {
+            CpuBackendLanguage::Broadcast([lhs_id, rhs_id, func_id, corrdims_id, ..]) => {
                 self.execute_broadcast(*lhs_id, *rhs_id, *func_id, *corrdims_id, expr, context)
             }
 

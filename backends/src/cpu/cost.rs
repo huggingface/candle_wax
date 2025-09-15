@@ -33,7 +33,7 @@ impl CostFunction<CpuBackendLanguage> for CpuBackendCost {
             CpuBackendLanguage::FusedSoftmax(args) => costs(args[0]) + 30,
 
             // Output wrapper
-            CpuBackendLanguage::Output(id) => costs(*id),
+            CpuBackendLanguage::Output(args) => costs(*args),
         }
     }
 }

@@ -1,4 +1,5 @@
 use core::{
+    Layout,
     backends::{broadcast::BroadcastFuncSame, map::MapFuncSame, reduce::ReduceFuncSame},
     storage::Storage,
     tensor::{LazyTensor, Tensor},
@@ -93,21 +94,29 @@ impl<S: Storage> CoreContextBulder<S> {
     fn build_recursively(&mut self, tensor: &LazyTensor<S>) -> Id {
         match tensor {
             LazyTensor::Tensor(t) => self.build_tensor_expr(t.clone()),
-            LazyTensor::Map { input, func, .. } => self.build_map_expr(input, func.clone()),
+            LazyTensor::Map {
+                input,
+                func,
+                layout,
+            } => self.build_map_expr(input, func.clone(), layout),
             LazyTensor::Reduce {
-                input, dim, func, ..
-            } => self.build_reduce_expr(input, *dim, func.clone()),
+                input,
+                dim,
+                func,
+                layout,
+            } => self.build_reduce_expr(input, *dim, func.clone(), layout),
             LazyTensor::Broadcast {
                 lhs_input,
                 rhs_input,
                 corresponding_dimensions,
                 func,
-                ..
+                layout,
             } => self.build_broadcast_expr(
                 lhs_input,
                 rhs_input,
                 corresponding_dimensions.clone(),
                 func.clone(),
+                layout,
             ),
         }
     }
@@ -133,7 +142,12 @@ impl<S: Storage> CoreContextBulder<S> {
         tensor_id
     }
 
-    fn build_map_expr(&mut self, input: &LazyTensor<S>, func: Arc<MapFuncSame<S>>) -> Id {
+    fn build_map_expr(
+        &mut self,
+        input: &LazyTensor<S>,
+        func: Arc<MapFuncSame<S>>,
+        layout: &Layout,
+    ) -> Id {
         let input_id = self.build_recursively(input);
         let func_id = Arc::as_ptr(&func) as *const () as usize;
         let func_name = func.as_str();
@@ -146,13 +160,14 @@ impl<S: Storage> CoreContextBulder<S> {
         let graph_func_id = self.context.egraph.add(map_func.clone());
         self.context.history.push((graph_func_id.clone(), map_func));
 
-        let map_id = self
-            .context
-            .egraph
-            .add(CoreLanguage::Map([input_id, graph_func_id]));
-        self.context
-            .history
-            .push((map_id.clone(), CoreLanguage::Map([input_id, graph_func_id])));
+        let shape = CoreLanguage::Shape(layout.into());
+        let shape_id = self.context.egraph.add(shape.clone());
+        self.context.history.push((shape_id.clone(), shape));
+
+        let map = CoreLanguage::Map([input_id, graph_func_id, shape_id]);
+
+        let map_id = self.context.egraph.add(map.clone());
+        self.context.history.push((map_id.clone(), map));
 
         map_id
     }
@@ -162,6 +177,7 @@ impl<S: Storage> CoreContextBulder<S> {
         input: &LazyTensor<S>,
         dim: i32,
         func: Arc<ReduceFuncSame<S>>,
+        layout: &Layout,
     ) -> Id {
         let input_id = self.build_recursively(input);
         let func_id = Arc::as_ptr(&func) as *const () as usize;
@@ -182,7 +198,11 @@ impl<S: Storage> CoreContextBulder<S> {
         let dim_id = self.context.egraph.add(dim_node.clone());
         self.context.history.push((dim_id.clone(), dim_node));
 
-        let reduce = CoreLanguage::Reduce([input_id, graph_func_id, dim_id]);
+        let shape = CoreLanguage::Shape(layout.into());
+        let shape_id = self.context.egraph.add(shape.clone());
+        self.context.history.push((shape_id.clone(), shape));
+
+        let reduce = CoreLanguage::Reduce([input_id, graph_func_id, dim_id, shape_id]);
         let reduce_id = self.context.egraph.add(reduce.clone());
         self.context.history.push((reduce_id.clone(), reduce));
         reduce_id
@@ -194,6 +214,7 @@ impl<S: Storage> CoreContextBulder<S> {
         rhs_input: &LazyTensor<S>,
         corresponding_dimensions: Vec<(i32, i32)>,
         func: Arc<BroadcastFuncSame<S>>,
+        layout: &Layout,
     ) -> Id {
         let lhs_id = self.build_recursively(lhs_input);
         let rhs_id = self.build_recursively(rhs_input);
@@ -217,7 +238,12 @@ impl<S: Storage> CoreContextBulder<S> {
             .history
             .push((corr_dims_id.clone(), corr_dims_node));
 
-        let broadcast = CoreLanguage::Broadcast([lhs_id, rhs_id, graph_func_id, corr_dims_id]);
+        let shape = CoreLanguage::Shape(layout.into());
+        let shape_id = self.context.egraph.add(shape.clone());
+        self.context.history.push((shape_id.clone(), shape));
+
+        let broadcast =
+            CoreLanguage::Broadcast([lhs_id, rhs_id, graph_func_id, corr_dims_id, shape_id]);
         let broadcast_id = self.context.egraph.add(broadcast.clone());
         self.context.history.push((broadcast_id.clone(), broadcast));
 

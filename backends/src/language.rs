@@ -9,11 +9,11 @@ use std::{
 
 define_language! {
     pub enum CoreLanguage {
-        "tensor" = Tensor([Id; 2]), // [tensor_id, shape_id]
-        "map" = Map([Id; 2]),        // [input_expr, func_id]
-        "reduce" = Reduce([Id; 3]),  // [input_expr, func_id, dim]
-        "broadcast" = Broadcast([Id; 4]), // [lhs_input_expr, rhs_input_expr, func_id, corresponding_dims]
-        "output" = Output(Id), // input_expr
+        "tensor" = Tensor([Id; 2]), // [tensor_id, out_shape_id]
+        "map" = Map([Id; 3]),        // [input_expr, func_id, out_shape_id]
+        "reduce" = Reduce([Id; 4]),  // [input_expr, func_id, dim, out_shape_id]
+        "broadcast" = Broadcast([Id; 5]), // [lhs_input_expr, rhs_input_expr, func_id, corresponding_dims, out_shape_id]
+        "output" = Output(Id), // [input_expr]
 
         MapFunc(FunctionLookup),
         ReduceFunc(FunctionLookup),
@@ -144,7 +144,6 @@ impl FromStr for Shape {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Shapes should look like [1, 2, 3, 4] etc
         let re = Regex::new(r"\[\s*(\d+\s*,\s*)*(\d+)\s*\]").unwrap();
         let inner_re = Regex::new(r"\d+").unwrap();
         if let Some(cap) = re.captures(s) {

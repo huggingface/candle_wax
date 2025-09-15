@@ -8,15 +8,11 @@ use crate::language::{CoreLanguage, CorrespondingDims, FunctionLookup, Shape, Te
 
 define_language! {
     pub enum CpuBackendLanguage {
-        "tensor" = Tensor([Id; 2]), // [tensor_id, shape_id]
-        "map" = Map([Id; 2]),        // [input_expr, func_id]
-        "reduce" = Reduce([Id; 3]),  // [input_expr, func_id, dim]
-        "broadcast" = Broadcast([Id; 4]), // [lhs_input_expr, rhs_input_expr, func_id, corresponding_dims]
-
-        "fused_batched_matmul" = FusedMatmul([Id; 2]),        // [lhs_input_expr, rhs_input_expr]
-        "fused_softmax" = FusedSoftmax([Id; 1]),      // [input_expr]
-
-        "output" = Output(Id), // input_expr
+        "tensor" = Tensor([Id; 2]), // [tensor_id, out_shape_id]
+        "map" = Map([Id; 3]),        // [input_expr, func_id, out_shape_id]
+        "reduce" = Reduce([Id; 4]),  // [input_expr, func_id, dim, out_shape_id]
+        "broadcast" = Broadcast([Id; 5]), // [lhs_input_expr, rhs_input_expr, func_id, corresponding_dims, out_shape_id]
+        "output" = Output(Id), // [input_expr]
 
         MapFunc(FunctionLookup),
         ReduceFunc(FunctionLookup),
@@ -26,6 +22,9 @@ define_language! {
         CorrespondingDims(CorrespondingDims),
         Dim(i32),
         Shape(Shape),
+
+        "fused_batched_matmul" = FusedMatmul([Id; 2]),        // [lhs_input_expr, rhs_input_expr]
+        "fused_softmax" = FusedSoftmax([Id; 1]),      // [input_expr]
     }
 }
 
@@ -51,21 +50,21 @@ impl From<CoreLanguage> for CpuBackendLanguage {
 pub fn rewrites() -> Vec<Rewrite<CpuBackendLanguage, ()>> {
     vec![
         rewrite!("fused-batched-matmul";
-            "(reduce (broadcast (tensor ?x_id ?x_shape) (tensor ?y_id ?y_shape) ?multiply_func ?corrdims) ?sum_func ?dim)" =>
-            "(fused_batched_matmul (tensor ?x_id ?x_shape) (tensor ?y_id ?y_shape))"
-            if is_matmul("?x_shape".parse().unwrap(), "?y_shape".parse().unwrap(), "?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?corrdims".parse().unwrap(), "?dim".parse().unwrap())
+            "(reduce (broadcast ?x ?y ?multiply_func ?corrdims ?b_shape) ?sum_func ?dim ?r_shape)" =>
+            "(fused_batched_matmul ?x ?y)"
+            if is_matmul("?x".parse().unwrap(), "?y".parse().unwrap(), "?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?corrdims".parse().unwrap(), "?dim".parse().unwrap())
         ),
         rewrite!("fused-softmax";
-            "(broadcast (map (tensor ?x_id ?x_shape) ?exp_func) (reduce (map (tensor ?x_id ?x_shape) ?exp_func) ?sum_func ?dim) ?div_func ?corrdims)" =>
-            "(fused_softmax (tensor ?x_id ?x_shape))"
-            if is_softmax("?x_shape".parse().unwrap(), "?exp_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?div_func".parse().unwrap(), "?dim".parse().unwrap(), "?corrdims".parse().unwrap())
+            "(broadcast (map ?x ?exp_func ?m_shape) (reduce (map ?x ?exp_func ?m_shape2) ?sum_func ?dim ?r_shape) ?div_func ?corrdims ?b_shape)" =>
+            "(fused_softmax ?x)"
+            if is_softmax("?x".parse().unwrap(), "?exp_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?div_func".parse().unwrap(), "?dim".parse().unwrap(), "?corrdims".parse().unwrap())
         ),
     ]
 }
 
 fn is_matmul(
-    tensor1_shape: Var,
-    tensor2_shape: Var,
+    input1: Var,
+    input2: Var,
     f1: Var,
     f2: Var,
     corrdims: Var,
@@ -91,11 +90,23 @@ fn is_matmul(
             }
         });
 
-        let tensor_a_shape = egraph[subst[tensor1_shape]]
+        let input_1_shape_id = egraph[subst[input1]]
             .nodes
             .iter()
-            .find_map(|node| {
-                if let CpuBackendLanguage::Shape(shape) = node {
+            .find_map(|node| match node {
+                CpuBackendLanguage::Tensor([_, shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Map([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Reduce([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Broadcast([.., shape_id]) => Some(shape_id),
+                _ => None,
+            })
+            .unwrap();
+
+        let input_1_shape = egraph[*input_1_shape_id]
+            .nodes
+            .iter()
+            .find_map(|shape_node| {
+                if let CpuBackendLanguage::Shape(shape) = shape_node {
                     Some(shape.shape.clone())
                 } else {
                     None
@@ -103,7 +114,19 @@ fn is_matmul(
             })
             .unwrap();
 
-        let tensor_b_shape = egraph[subst[tensor2_shape]]
+        let input_2_shape_id = egraph[subst[input2]]
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                CpuBackendLanguage::Tensor([_, shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Map([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Reduce([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Broadcast([.., shape_id]) => Some(shape_id),
+                _ => None,
+            })
+            .unwrap();
+
+        let input_2_shape = egraph[*input_2_shape_id]
             .nodes
             .iter()
             .find_map(|node| {
@@ -119,8 +142,8 @@ fn is_matmul(
             if let CpuBackendLanguage::CorrespondingDims(dims) = node {
                 dims.0.len() == 1
                     && (dims.0[0] == (-2, -1)
-                        || (dims.0[0].0 as usize == (tensor_a_shape.len() - 1)
-                            && dims.0[0].1 as usize == (tensor_b_shape.len() - 2)))
+                        || (dims.0[0].0 as usize == (input_1_shape.len() - 1)
+                            && dims.0[0].1 as usize == (input_2_shape.len() - 2)))
             } else {
                 false
             }
@@ -128,7 +151,7 @@ fn is_matmul(
 
         let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::Dim(d) = node {
-                *d == -2 || (*d as usize) == (tensor_a_shape.len() + tensor_b_shape.len() - 3)
+                *d == -2 || (*d as usize) == (input_1_shape.len() + input_2_shape.len() - 3)
             } else {
                 false
             }
@@ -139,7 +162,7 @@ fn is_matmul(
 }
 
 fn is_softmax(
-    tensor_shape: Var,
+    input: Var,
     f1: Var,
     f2: Var,
     f3: Var,
@@ -175,7 +198,19 @@ fn is_softmax(
             }
         });
 
-        let tensor_shape = egraph[subst[tensor_shape]]
+        let shape_id = egraph[subst[input]]
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                CpuBackendLanguage::Tensor([_, shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Map([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Reduce([.., shape_id]) => Some(shape_id),
+                CpuBackendLanguage::Broadcast([.., shape_id]) => Some(shape_id),
+                _ => None,
+            })
+            .unwrap();
+
+        let shape = egraph[*shape_id]
             .nodes
             .iter()
             .find_map(|node| {
@@ -191,8 +226,8 @@ fn is_softmax(
             if let CpuBackendLanguage::CorrespondingDims(dims) = node {
                 dims.0.len() == 1
                     && (dims.0[0] == (-2, -1)
-                        || (dims.0[0].0 as usize == (tensor_shape.len() - 1)
-                            && dims.0[0].1 as usize == (tensor_shape.len() - 2)))
+                        || (dims.0[0].0 as usize == (shape.len() - 1)
+                            && dims.0[0].1 as usize == (shape.len() - 2)))
             } else {
                 false
             }
@@ -200,7 +235,7 @@ fn is_softmax(
 
         let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::Dim(d) = node {
-                *d == -1 || (*d as usize) == (tensor_shape.len() - 1)
+                *d == -1 || (*d as usize) == (shape.len() - 1)
             } else {
                 false
             }
