@@ -1,112 +1,10 @@
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::{
-    fmt::{Debug, Display},
-    str::FromStr,
-};
 
 use egg::{EGraph, Id, Rewrite, Subst, Var, define_language, rewrite};
 use regex::Regex;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct CorrespondingDims(pub Vec<(i32, i32)>);
-
-impl Display for CorrespondingDims {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CorrespondingDims({:?})", self.0)
-    }
-}
-
-impl FromStr for CorrespondingDims {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Corresponding dims should look for a string that looks like:
-        // [(0, 1), (-3, -2), ...] etc
-        let re = Regex::new(
-            r"\[\s*(\(\s*-?\d+\s*,\s*-?\d+\s*\)\s*,\s*)*(\(\s*-?\d+\s*,\s*-?\d+\s*\))\s*\]",
-        )
-        .unwrap();
-        let inner_re = Regex::new(r"\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)").unwrap();
-        if let Some(cap) = re.captures(s) {
-            let mut dims = Vec::new();
-            for i in 1..cap.len() {
-                let dim = cap[i].to_string();
-                if let Some(dim_cap) = inner_re.captures(&dim) {
-                    let id1 = dim_cap[1].parse::<i32>().unwrap();
-                    let id2 = dim_cap[2].parse::<i32>().unwrap();
-                    dims.push((id1, id2));
-                }
-            }
-            Ok(CorrespondingDims(dims))
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<Vec<(i32, i32)>> for CorrespondingDims {
-    fn from(value: Vec<(i32, i32)>) -> Self {
-        CorrespondingDims(value)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct FunctionLookup {
-    pub id: usize,
-    pub func_type: String,
-}
-
-impl Display for FunctionLookup {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}({})", self.func_type, self.id)
-    }
-}
-
-impl FromStr for FunctionLookup {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = Regex::new(r"\s*([a-zA-Z]+[a-zA-Z0-9]*)\(\s*(\d+)\s*\)").unwrap();
-        if let Some(cap) = re.captures(s) {
-            let func_type = cap[1].to_string();
-            let id = cap[2].parse::<usize>().unwrap();
-            Ok(FunctionLookup { id, func_type })
-        } else {
-            Err(())
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct TensorRef {
-    pub id: usize,
-    pub shape: Vec<usize>,
-}
-
-impl Display for TensorRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TensorRef({:?}, {:?})", self.id, self.shape)
-    }
-}
-
-impl FromStr for TensorRef {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = Regex::new(r"TensorRef\(\s*(\d+)\s*,\s*\[([^\]]*)\]\s*\)").unwrap();
-        if let Some(cap) = re.captures(s) {
-            let id = cap[1].parse::<usize>().unwrap();
-            let shape_str = &cap[2];
-            let shape: Vec<usize> = shape_str
-                .split(',')
-                .map(|s| s.trim().parse::<usize>().unwrap())
-                .collect();
-            Ok(TensorRef { id, shape })
-        } else {
-            Err(())
-        }
-    }
-}
+use crate::language::{CoreLanguage, CorrespondingDims, FunctionLookup, TensorRef};
 
 define_language! {
     pub enum CpuBackendLanguage {
@@ -126,6 +24,23 @@ define_language! {
         Tensor(TensorRef),
         CorrespondingDims(CorrespondingDims),
         Dim(i32),
+    }
+}
+
+impl From<CoreLanguage> for CpuBackendLanguage {
+    fn from(core: CoreLanguage) -> Self {
+        match core {
+            CoreLanguage::Map(args) => CpuBackendLanguage::Map(args),
+            CoreLanguage::Reduce(args) => CpuBackendLanguage::Reduce(args),
+            CoreLanguage::Broadcast(args) => CpuBackendLanguage::Broadcast(args),
+            CoreLanguage::Output(args) => CpuBackendLanguage::Output(args),
+            CoreLanguage::MapFunc(func) => CpuBackendLanguage::MapFunc(func),
+            CoreLanguage::ReduceFunc(func) => CpuBackendLanguage::ReduceFunc(func),
+            CoreLanguage::BroadcastFunc(func) => CpuBackendLanguage::BroadcastFunc(func),
+            CoreLanguage::Tensor(tensor) => CpuBackendLanguage::Tensor(tensor),
+            CoreLanguage::CorrespondingDims(dims) => CpuBackendLanguage::CorrespondingDims(dims),
+            CoreLanguage::Dim(dim) => CpuBackendLanguage::Dim(dim),
+        }
     }
 }
 
@@ -172,50 +87,50 @@ fn is_matmul(
             }
         });
 
-        let tensor_a_shape = egraph[subst[tensor1]]
-            .nodes
-            .iter()
-            .find_map(|node| {
-                if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-                    Some(tensor_ref.shape.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        // let tensor_a_shape = egraph[subst[tensor1]]
+        //     .nodes
+        //     .iter()
+        //     .find_map(|node| {
+        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
+        //             Some(tensor_ref.shape.clone())
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .unwrap();
 
-        let tensor_b_shape = egraph[subst[tensor2]]
-            .nodes
-            .iter()
-            .find_map(|node| {
-                if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-                    Some(tensor_ref.shape.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        // let tensor_b_shape = egraph[subst[tensor2]]
+        //     .nodes
+        //     .iter()
+        //     .find_map(|node| {
+        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
+        //             Some(tensor_ref.shape.clone())
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .unwrap();
 
-        let cordims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
-            if let CpuBackendLanguage::CorrespondingDims(dims) = node {
-                dims.0.len() == 1
-                    && (dims.0[0] == (-2, -1)
-                        || (dims.0[0].0 as usize == (tensor_a_shape.len() - 1)
-                            && dims.0[0].1 as usize == (tensor_b_shape.len() - 2)))
-            } else {
-                false
-            }
-        });
+        // let cordims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
+        //     if let CpuBackendLanguage::CorrespondingDims(dims) = node {
+        //         dims.0.len() == 1
+        //             && (dims.0[0] == (-2, -1)
+        //                 || (dims.0[0].0 as usize == (tensor_a_shape.len() - 1)
+        //                     && dims.0[0].1 as usize == (tensor_b_shape.len() - 2)))
+        //     } else {
+        //         false
+        //     }
+        // });
 
-        let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
-            if let CpuBackendLanguage::Dim(d) = node {
-                *d == -2 || (*d as usize) == (tensor_a_shape.len() + tensor_b_shape.len() - 3)
-            } else {
-                false
-            }
-        });
+        // let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
+        //     if let CpuBackendLanguage::Dim(d) = node {
+        //         *d == -2 || (*d as usize) == (tensor_a_shape.len() + tensor_b_shape.len() - 3)
+        //     } else {
+        //         false
+        //     }
+        // });
 
-        f1_matches && f2_matches && cordims_matches && dims_matches
+        f1_matches && f2_matches // && cordims_matches && dims_matches
     }
 }
 
@@ -256,37 +171,37 @@ fn is_softmax(
             }
         });
 
-        let tensor_shape = egraph[subst[tensor]]
-            .nodes
-            .iter()
-            .find_map(|node| {
-                if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-                    Some(tensor_ref.shape.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        // let tensor_shape = egraph[subst[tensor]]
+        //     .nodes
+        //     .iter()
+        //     .find_map(|node| {
+        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
+        //             Some(tensor_ref.shape.clone())
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .unwrap();
 
-        let corrdims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
-            if let CpuBackendLanguage::CorrespondingDims(dims) = node {
-                dims.0.len() == 1
-                    && (dims.0[0] == (-2, -1)
-                        || (dims.0[0].0 as usize == (tensor_shape.len() - 1)
-                            && dims.0[0].1 as usize == (tensor_shape.len() - 2)))
-            } else {
-                false
-            }
-        });
+        // let corrdims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
+        //     if let CpuBackendLanguage::CorrespondingDims(dims) = node {
+        //         dims.0.len() == 1
+        //             && (dims.0[0] == (-2, -1)
+        //                 || (dims.0[0].0 as usize == (tensor_shape.len() - 1)
+        //                     && dims.0[0].1 as usize == (tensor_shape.len() - 2)))
+        //     } else {
+        //         false
+        //     }
+        // });
 
-        let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
-            if let CpuBackendLanguage::Dim(d) = node {
-                *d == -1 || (*d as usize) == (tensor_shape.len() - 1)
-            } else {
-                false
-            }
-        });
+        // let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
+        //     if let CpuBackendLanguage::Dim(d) = node {
+        //         *d == -1 || (*d as usize) == (tensor_shape.len() - 1)
+        //     } else {
+        //         false
+        //     }
+        // });
 
-        f1_matches && f2_matches && f3_matches && corrdims_matches && dims_matches
+        f1_matches && f2_matches && f3_matches //&& corrdims_matches && dims_matches
     }
 }

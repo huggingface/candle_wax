@@ -7,8 +7,7 @@ use egg::{CostFunction, EGraph, Extractor, Id, Rewrite, Runner};
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    context::BackendContext,
-    cpu::language::{FunctionLookup, TensorRef},
+    context::{BackendContext, CoreContext},
     node_executor::EggNodeExecutor,
 };
 
@@ -56,85 +55,17 @@ impl<S: Storage> BackendContext for CpuBackendContext<S> {
     }
 }
 
-impl<S: Storage> CpuBackendContext<S> {
-    pub fn set_eval_node_id(&mut self, id: Id) {
-        self.eval_node_id = Some(id);
-    }
-
-    pub fn add_tensor(&mut self, tensor: Arc<Tensor<S>>) -> Id {
-        let tensor_id = Arc::as_ptr(&tensor) as usize;
-        let tensor_shape = tensor.layout.shape.clone();
-        self.tensors.insert(tensor_id, tensor);
-        self.egraph.add(CpuBackendLanguage::Tensor(TensorRef {
-            id: tensor_id,
-            shape: tensor_shape,
-        }))
-    }
-
-    pub fn add_map(&mut self, input: Id, func: Arc<MapFuncSame<S>>) -> Id {
-        let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
-        self.map_funcs.insert(func_id, func);
-        let graph_func_id = self.egraph.add(CpuBackendLanguage::MapFunc(FunctionLookup {
-            id: func_id,
-            func_type: func_name,
-        }));
-        self.egraph
-            .add(CpuBackendLanguage::Map([input, graph_func_id]))
-    }
-
-    pub fn add_reduce(&mut self, input: Id, func: Arc<ReduceFuncSame<S>>, dim: i32) -> Id {
-        let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
-        self.reduce_funcs.insert(func_id, func);
-        let graph_func_id = self
-            .egraph
-            .add(CpuBackendLanguage::ReduceFunc(FunctionLookup {
-                id: func_id,
-                func_type: func_name,
-            }));
-        let dim_id = self.egraph.add(CpuBackendLanguage::Dim(dim));
-        self.egraph
-            .add(CpuBackendLanguage::Reduce([input, graph_func_id, dim_id]))
-    }
-
-    pub fn add_broadcast(
-        &mut self,
-        lhs_input: Id,
-        rhs_input: Id,
-        func: Arc<BroadcastFuncSame<S>>,
-        corresponding_dimensions: Vec<(i32, i32)>,
-    ) -> Id {
-        let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
-        self.broadcast_funcs.insert(func_id, func);
-        let graph_func_id = self
-            .egraph
-            .add(CpuBackendLanguage::BroadcastFunc(FunctionLookup {
-                id: func_id,
-                func_type: func_name,
-            }));
-        let corr_dims_id = self.egraph.add(CpuBackendLanguage::CorrespondingDims(
-            corresponding_dimensions.clone().into(),
-        ));
-        self.egraph.add(CpuBackendLanguage::Broadcast([
-            lhs_input,
-            rhs_input,
-            graph_func_id,
-            corr_dims_id,
-        ]))
-    }
-}
-
-impl<S: Storage> Default for CpuBackendContext<S> {
-    fn default() -> Self {
+impl<S: Storage> From<CoreContext<S>> for CpuBackendContext<S> {
+    fn from(core: CoreContext<S>) -> Self {
+        let egraph = core.map_egraph();
+        let eval_node_id = core.last_added_id();
         Self {
-            tensors: HashMap::new(),
-            map_funcs: HashMap::default(),
-            reduce_funcs: HashMap::default(),
-            broadcast_funcs: HashMap::default(),
-            egraph: EGraph::default(),
-            eval_node_id: None,
+            tensors: core.tensors,
+            map_funcs: core.map_funcs,
+            reduce_funcs: core.reduce_funcs,
+            broadcast_funcs: core.broadcast_funcs,
+            egraph,
+            eval_node_id,
             rewrites: Vec::new(),
             executor: CpuExecutor,
         }

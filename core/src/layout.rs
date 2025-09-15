@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Layout {
     pub shape: Vec<usize>,
     pub strides: Vec<usize>,
