@@ -34,11 +34,9 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
         context: &CpuBackendContext<S>,
     ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
         match node {
-            CpuBackendLanguage::Tensor(tensor_id) => context
-                .tensors
-                .get(&tensor_id.id)
-                .cloned()
-                .ok_or(CpuBackendError::TensorNotFound(tensor_id.id)),
+            CpuBackendLanguage::Tensor([tensor_id, shape_id]) => {
+                self.execute_tensor(*tensor_id, *shape_id, expr, context)
+            }
 
             CpuBackendLanguage::Map([input_id, func_id]) => {
                 self.execute_map(*input_id, *func_id, expr, context)
@@ -107,6 +105,28 @@ impl<S: Storage> EggNodeExecutor<CpuBackendContext<S>> for CpuExecutor {
 }
 
 impl CpuExecutor {
+    fn execute_tensor<S: Storage>(
+        &self,
+        tensor_id: Id,
+        _shape_id: Id,
+        expr: &egg::RecExpr<CpuBackendLanguage>,
+        context: &CpuBackendContext<S>,
+    ) -> Result<Arc<Tensor<S>>, CpuBackendError> {
+        match &expr[tensor_id] {
+            CpuBackendLanguage::TensorRef(f) => context
+                .tensors
+                .get(&f.id)
+                .cloned()
+                .ok_or(CpuBackendError::TensorNotFound(f.id)),
+            _ => {
+                return Err(CpuBackendError::UnexpectedNodeType {
+                    expected: "TensorRef".to_string(),
+                    found: format!("{:?}", &expr[tensor_id]),
+                });
+            }
+        }
+    }
+
     fn execute_map<S: Storage>(
         &self,
         input_id: Id,

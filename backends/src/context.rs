@@ -114,11 +114,23 @@ impl<S: Storage> CoreContextBulder<S> {
 
     fn build_tensor_expr(&mut self, tensor: Arc<Tensor<S>>) -> Id {
         let tensor_id = Arc::as_ptr(&tensor) as usize;
-        self.context.tensors.insert(tensor_id, tensor);
-        let to_insert = CoreLanguage::Tensor(TensorRef { id: tensor_id });
-        let id = self.context.egraph.add(to_insert.clone());
-        self.context.history.push((id.clone(), to_insert));
-        id
+        self.context.tensors.insert(tensor_id, tensor.clone());
+
+        let tensor_ref = CoreLanguage::TensorRef(TensorRef { id: tensor_id });
+        let tensor_ref_id = self.context.egraph.add(tensor_ref.clone());
+        self.context
+            .history
+            .push((tensor_ref_id.clone(), tensor_ref));
+
+        let shape = CoreLanguage::Shape((&tensor.layout).into());
+        let shape_id = self.context.egraph.add(shape.clone());
+        self.context.history.push((shape_id.clone(), shape));
+
+        let tensor = CoreLanguage::Tensor([tensor_ref_id, shape_id]);
+        let tensor_id = self.context.egraph.add(tensor.clone());
+        self.context.history.push((tensor_id.clone(), tensor));
+
+        tensor_id
     }
 
     fn build_map_expr(&mut self, input: &LazyTensor<S>, func: Arc<MapFuncSame<S>>) -> Id {

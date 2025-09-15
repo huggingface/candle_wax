@@ -4,10 +4,11 @@ use std::hash::Hash;
 use egg::{EGraph, Id, Rewrite, Subst, Var, define_language, rewrite};
 use regex::Regex;
 
-use crate::language::{CoreLanguage, CorrespondingDims, FunctionLookup, TensorRef};
+use crate::language::{CoreLanguage, CorrespondingDims, FunctionLookup, Shape, TensorRef};
 
 define_language! {
     pub enum CpuBackendLanguage {
+        "tensor" = Tensor([Id; 2]), // [tensor_id, shape_id]
         "map" = Map([Id; 2]),        // [input_expr, func_id]
         "reduce" = Reduce([Id; 3]),  // [input_expr, func_id, dim]
         "broadcast" = Broadcast([Id; 4]), // [lhs_input_expr, rhs_input_expr, func_id, corresponding_dims]
@@ -21,15 +22,17 @@ define_language! {
         ReduceFunc(FunctionLookup),
         BroadcastFunc(FunctionLookup),
 
-        Tensor(TensorRef),
+        TensorRef(TensorRef),
         CorrespondingDims(CorrespondingDims),
         Dim(i32),
+        Shape(Shape),
     }
 }
 
 impl From<CoreLanguage> for CpuBackendLanguage {
     fn from(core: CoreLanguage) -> Self {
         match core {
+            CoreLanguage::Tensor(args) => CpuBackendLanguage::Tensor(args),
             CoreLanguage::Map(args) => CpuBackendLanguage::Map(args),
             CoreLanguage::Reduce(args) => CpuBackendLanguage::Reduce(args),
             CoreLanguage::Broadcast(args) => CpuBackendLanguage::Broadcast(args),
@@ -37,9 +40,10 @@ impl From<CoreLanguage> for CpuBackendLanguage {
             CoreLanguage::MapFunc(func) => CpuBackendLanguage::MapFunc(func),
             CoreLanguage::ReduceFunc(func) => CpuBackendLanguage::ReduceFunc(func),
             CoreLanguage::BroadcastFunc(func) => CpuBackendLanguage::BroadcastFunc(func),
-            CoreLanguage::Tensor(tensor) => CpuBackendLanguage::Tensor(tensor),
+            CoreLanguage::TensorRef(tensor_ref) => CpuBackendLanguage::TensorRef(tensor_ref),
             CoreLanguage::CorrespondingDims(dims) => CpuBackendLanguage::CorrespondingDims(dims),
             CoreLanguage::Dim(dim) => CpuBackendLanguage::Dim(dim),
+            CoreLanguage::Shape(shape) => CpuBackendLanguage::Shape(shape),
         }
     }
 }
@@ -47,21 +51,21 @@ impl From<CoreLanguage> for CpuBackendLanguage {
 pub fn rewrites() -> Vec<Rewrite<CpuBackendLanguage, ()>> {
     vec![
         rewrite!("fused-batched-matmul";
-            "(reduce (broadcast ?x ?y  ?multiply_func ?corrdims) ?sum_func ?dim)" =>
-            "(fused_batched_matmul ?x ?y)"
-            if is_matmul("?x".parse().unwrap(), "?y".parse().unwrap(), "?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?corrdims".parse().unwrap(), "?dim".parse().unwrap())
+            "(reduce (broadcast (tensor ?x_id ?x_shape) (tensor ?y_id ?y_shape) ?multiply_func ?corrdims) ?sum_func ?dim)" =>
+            "(fused_batched_matmul (tensor ?x_id ?x_shape) (tensor ?y_id ?y_shape))"
+            if is_matmul("?x_shape".parse().unwrap(), "?y_shape".parse().unwrap(), "?multiply_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?corrdims".parse().unwrap(), "?dim".parse().unwrap())
         ),
         rewrite!("fused-softmax";
-            "(broadcast (map ?x ?exp_func) (reduce (map ?x ?exp_func) ?sum_func ?dim) ?div_func ?corrdims)" =>
-            "(fused_softmax ?x)"
-            if is_softmax("?x".parse().unwrap(), "?exp_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?div_func".parse().unwrap(), "?dim".parse().unwrap(), "?corrdims".parse().unwrap())
+            "(broadcast (map (tensor ?x_id ?x_shape) ?exp_func) (reduce (map (tensor ?x_id ?x_shape) ?exp_func) ?sum_func ?dim) ?div_func ?corrdims)" =>
+            "(fused_softmax (tensor ?x_id ?x_shape))"
+            if is_softmax("?x_shape".parse().unwrap(), "?exp_func".parse().unwrap(), "?sum_func".parse().unwrap(), "?div_func".parse().unwrap(), "?dim".parse().unwrap(), "?corrdims".parse().unwrap())
         ),
     ]
 }
 
 fn is_matmul(
-    tensor1: Var,
-    tensor2: Var,
+    tensor1_shape: Var,
+    tensor2_shape: Var,
     f1: Var,
     f2: Var,
     corrdims: Var,
@@ -87,55 +91,55 @@ fn is_matmul(
             }
         });
 
-        // let tensor_a_shape = egraph[subst[tensor1]]
-        //     .nodes
-        //     .iter()
-        //     .find_map(|node| {
-        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-        //             Some(tensor_ref.shape.clone())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .unwrap();
+        let tensor_a_shape = egraph[subst[tensor1_shape]]
+            .nodes
+            .iter()
+            .find_map(|node| {
+                if let CpuBackendLanguage::Shape(shape) = node {
+                    Some(shape.shape.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
-        // let tensor_b_shape = egraph[subst[tensor2]]
-        //     .nodes
-        //     .iter()
-        //     .find_map(|node| {
-        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-        //             Some(tensor_ref.shape.clone())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .unwrap();
+        let tensor_b_shape = egraph[subst[tensor2_shape]]
+            .nodes
+            .iter()
+            .find_map(|node| {
+                if let CpuBackendLanguage::Shape(shape) = node {
+                    Some(shape.shape.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
-        // let cordims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
-        //     if let CpuBackendLanguage::CorrespondingDims(dims) = node {
-        //         dims.0.len() == 1
-        //             && (dims.0[0] == (-2, -1)
-        //                 || (dims.0[0].0 as usize == (tensor_a_shape.len() - 1)
-        //                     && dims.0[0].1 as usize == (tensor_b_shape.len() - 2)))
-        //     } else {
-        //         false
-        //     }
-        // });
+        let cordims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::CorrespondingDims(dims) = node {
+                dims.0.len() == 1
+                    && (dims.0[0] == (-2, -1)
+                        || (dims.0[0].0 as usize == (tensor_a_shape.len() - 1)
+                            && dims.0[0].1 as usize == (tensor_b_shape.len() - 2)))
+            } else {
+                false
+            }
+        });
 
-        // let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
-        //     if let CpuBackendLanguage::Dim(d) = node {
-        //         *d == -2 || (*d as usize) == (tensor_a_shape.len() + tensor_b_shape.len() - 3)
-        //     } else {
-        //         false
-        //     }
-        // });
+        let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::Dim(d) = node {
+                *d == -2 || (*d as usize) == (tensor_a_shape.len() + tensor_b_shape.len() - 3)
+            } else {
+                false
+            }
+        });
 
-        f1_matches && f2_matches // && cordims_matches && dims_matches
+        f1_matches && f2_matches && cordims_matches && dims_matches
     }
 }
 
 fn is_softmax(
-    tensor: Var,
+    tensor_shape: Var,
     f1: Var,
     f2: Var,
     f3: Var,
@@ -171,37 +175,37 @@ fn is_softmax(
             }
         });
 
-        // let tensor_shape = egraph[subst[tensor]]
-        //     .nodes
-        //     .iter()
-        //     .find_map(|node| {
-        //         if let CpuBackendLanguage::Tensor(tensor_ref) = node {
-        //             Some(tensor_ref.shape.clone())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .unwrap();
+        let tensor_shape = egraph[subst[tensor_shape]]
+            .nodes
+            .iter()
+            .find_map(|node| {
+                if let CpuBackendLanguage::Shape(shape) = node {
+                    Some(shape.shape.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
-        // let corrdims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
-        //     if let CpuBackendLanguage::CorrespondingDims(dims) = node {
-        //         dims.0.len() == 1
-        //             && (dims.0[0] == (-2, -1)
-        //                 || (dims.0[0].0 as usize == (tensor_shape.len() - 1)
-        //                     && dims.0[0].1 as usize == (tensor_shape.len() - 2)))
-        //     } else {
-        //         false
-        //     }
-        // });
+        let corrdims_matches = egraph[subst[corrdims]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::CorrespondingDims(dims) = node {
+                dims.0.len() == 1
+                    && (dims.0[0] == (-2, -1)
+                        || (dims.0[0].0 as usize == (tensor_shape.len() - 1)
+                            && dims.0[0].1 as usize == (tensor_shape.len() - 2)))
+            } else {
+                false
+            }
+        });
 
-        // let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
-        //     if let CpuBackendLanguage::Dim(d) = node {
-        //         *d == -1 || (*d as usize) == (tensor_shape.len() - 1)
-        //     } else {
-        //         false
-        //     }
-        // });
+        let dims_matches = egraph[subst[dim]].nodes.iter().any(|node| {
+            if let CpuBackendLanguage::Dim(d) = node {
+                *d == -1 || (*d as usize) == (tensor_shape.len() - 1)
+            } else {
+                false
+            }
+        });
 
-        f1_matches && f2_matches && f3_matches //&& corrdims_matches && dims_matches
+        f1_matches && f2_matches && f3_matches && corrdims_matches && dims_matches
     }
 }
