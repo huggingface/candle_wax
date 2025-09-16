@@ -127,9 +127,7 @@ impl<S: Storage> CoreContextBulder<S> {
 
         let tensor_ref = CoreLanguage::TensorRef(TensorRef { id: tensor_id });
         let tensor_ref_id = self.context.egraph.add(tensor_ref.clone());
-        self.context
-            .history
-            .push((tensor_ref_id, tensor_ref));
+        self.context.history.push((tensor_ref_id, tensor_ref));
 
         let shape = CoreLanguage::Shape((&tensor.layout).into());
         let shape_id = self.context.egraph.add(shape.clone());
@@ -150,11 +148,11 @@ impl<S: Storage> CoreContextBulder<S> {
     ) -> Id {
         let input_id = self.build_recursively(input);
         let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
+        let func_name = func.hint_string();
         self.context.map_funcs.insert(func_id, func);
         let map_func = CoreLanguage::MapFunc(FunctionLookup {
             id: func_id,
-            func_type: func_name,
+            hint: func_name,
         });
 
         let graph_func_id = self.context.egraph.add(map_func.clone());
@@ -181,18 +179,16 @@ impl<S: Storage> CoreContextBulder<S> {
     ) -> Id {
         let input_id = self.build_recursively(input);
         let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
+        let func_name = func.hint_string();
         self.context.reduce_funcs.insert(func_id, func);
 
         let reduce_func = CoreLanguage::ReduceFunc(FunctionLookup {
             id: func_id,
-            func_type: func_name,
+            hint: func_name,
         });
 
         let graph_func_id = self.context.egraph.add(reduce_func.clone());
-        self.context
-            .history
-            .push((graph_func_id, reduce_func));
+        self.context.history.push((graph_func_id, reduce_func));
 
         let dim_node = CoreLanguage::Dim(dim);
         let dim_id = self.context.egraph.add(dim_node.clone());
@@ -219,24 +215,20 @@ impl<S: Storage> CoreContextBulder<S> {
         let lhs_id = self.build_recursively(lhs_input);
         let rhs_id = self.build_recursively(rhs_input);
         let func_id = Arc::as_ptr(&func) as *const () as usize;
-        let func_name = func.as_str();
+        let func_name = func.hint_string();
         self.context.broadcast_funcs.insert(func_id, func);
 
         let broadcast_func = CoreLanguage::BroadcastFunc(FunctionLookup {
             id: func_id,
-            func_type: func_name,
+            hint: func_name,
         });
         let graph_func_id = self.context.egraph.add(broadcast_func.clone());
-        self.context
-            .history
-            .push((graph_func_id, broadcast_func));
+        self.context.history.push((graph_func_id, broadcast_func));
 
         let corr_dims_node =
             CoreLanguage::CorrespondingDims(corresponding_dimensions.clone().into());
         let corr_dims_id = self.context.egraph.add(corr_dims_node.clone());
-        self.context
-            .history
-            .push((corr_dims_id, corr_dims_node));
+        self.context.history.push((corr_dims_id, corr_dims_node));
 
         let shape = CoreLanguage::Shape(layout.into());
         let shape_id = self.context.egraph.add(shape.clone());

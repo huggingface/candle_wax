@@ -103,13 +103,8 @@ impl<U: CpuDtype + Zero + std::cmp::PartialOrd + Div + Div<Output = U>>
         CpuStorage { data: output_data }
     }
 
-    fn as_str(&self) -> String {
-        format!(
-            "CpuDivide({}, {} -> {})",
-            std::any::type_name::<CpuStorage<U>>(),
-            std::any::type_name::<CpuStorage<U>>(),
-            std::any::type_name::<CpuStorage<U>>()
-        )
+    fn hint_string(&self) -> String {
+        "Divide".to_string()
     }
 }
 

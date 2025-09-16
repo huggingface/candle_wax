@@ -118,12 +118,10 @@ impl CpuExecutor {
                 .get(&f.id)
                 .cloned()
                 .ok_or(CpuBackendError::TensorNotFound(f.id)),
-            _ => {
-                Err(CpuBackendError::UnexpectedNodeType {
-                    expected: "TensorRef".to_string(),
-                    found: format!("{:?}", &expr[tensor_id]),
-                })
-            }
+            _ => Err(CpuBackendError::UnexpectedNodeType {
+                expected: "TensorRef".to_string(),
+                found: format!("{:?}", &expr[tensor_id]),
+            }),
         }
     }
 

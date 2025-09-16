@@ -47,12 +47,8 @@ impl<U: CpuDtype + Zero + std::ops::Add<Output = U>> ReduceFunc<CpuStorage<U>, C
         CpuStorage { data: output_data }
     }
 
-    fn as_str(&self) -> String {
-        format!(
-            "CpuSum({} -> {})",
-            std::any::type_name::<CpuStorage<U>>(),
-            std::any::type_name::<CpuStorage<U>>()
-        )
+    fn hint_string(&self) -> String {
+        "Sum".to_string()
     }
 }
 

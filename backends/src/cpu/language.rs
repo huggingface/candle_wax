@@ -76,7 +76,7 @@ fn is_matmul(
     move |egraph, _, subst| {
         let f1_matches = egraph[subst[f1]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::BroadcastFunc(func_lookup) = node {
-                mul_pattern.is_match(func_lookup.func_type.as_str())
+                mul_pattern.is_match(&func_lookup.hint)
             } else {
                 false
             }
@@ -84,7 +84,7 @@ fn is_matmul(
 
         let f2_matches = egraph[subst[f2]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::ReduceFunc(func_lookup) = node {
-                sum_pattern.is_match(func_lookup.func_type.as_str())
+                sum_pattern.is_match(&func_lookup.hint)
             } else {
                 false
             }
@@ -176,7 +176,7 @@ fn is_softmax(
     move |egraph, _, subst| {
         let f1_matches = egraph[subst[f1]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::MapFunc(func_lookup) = node {
-                exp_pattern.is_match(func_lookup.func_type.as_str())
+                exp_pattern.is_match(&func_lookup.hint)
             } else {
                 false
             }
@@ -184,7 +184,7 @@ fn is_softmax(
 
         let f2_matches = egraph[subst[f2]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::ReduceFunc(func_lookup) = node {
-                sum_pattern.is_match(func_lookup.func_type.as_str())
+                sum_pattern.is_match(&func_lookup.hint)
             } else {
                 false
             }
@@ -192,7 +192,7 @@ fn is_softmax(
 
         let f3_matches = egraph[subst[f3]].nodes.iter().any(|node| {
             if let CpuBackendLanguage::BroadcastFunc(func_lookup) = node {
-                div_pattern.is_match(func_lookup.func_type.as_str())
+                div_pattern.is_match(&func_lookup.hint)
             } else {
                 false
             }

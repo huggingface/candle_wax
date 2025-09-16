@@ -21,5 +21,5 @@ where
 {
     fn forward(&self, layout: &Layout, storage: &S, dim: i32) -> T;
 
-    fn as_str(&self) -> String;
+    fn hint_string(&self) -> String;
 }

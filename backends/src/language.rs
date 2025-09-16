@@ -72,12 +72,12 @@ impl From<Vec<(i32, i32)>> for CorrespondingDims {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct FunctionLookup {
     pub id: usize,
-    pub func_type: String,
+    pub hint: String,
 }
 
 impl Display for FunctionLookup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}({})", self.func_type, self.id)
+        write!(f, "{}({})", self.hint, self.id)
     }
 }
 
@@ -87,9 +87,9 @@ impl FromStr for FunctionLookup {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let re = Regex::new(r"\s*([a-zA-Z]+[a-zA-Z0-9]*)\(\s*(\d+)\s*\)").unwrap();
         if let Some(cap) = re.captures(s) {
-            let func_type = cap[1].to_string();
+            let hint = cap[1].to_string();
             let id = cap[2].parse::<usize>().unwrap();
-            Ok(FunctionLookup { id, func_type })
+            Ok(FunctionLookup { id, hint })
         } else {
             Err(())
         }

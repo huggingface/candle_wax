@@ -38,5 +38,5 @@ where
         corresponding_dims: &[(i32, i32)],
     ) -> T;
 
-    fn as_str(&self) -> String;
+    fn hint_string(&self) -> String;
 }

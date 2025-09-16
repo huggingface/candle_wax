@@ -21,12 +21,8 @@ impl<U: CpuDtype + Real + std::cmp::PartialOrd> MapFunc<CpuStorage<U>, CpuStorag
         }
     }
 
-    fn as_str(&self) -> String {
-        format!(
-            "CpuExp({} -> {})",
-            std::any::type_name::<CpuStorage<U>>(),
-            std::any::type_name::<CpuStorage<U>>()
-        )
+    fn hint_string(&self) -> String {
+        "Exp".to_string()
     }
 }
 
