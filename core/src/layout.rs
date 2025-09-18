@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    ops::{Bound, RangeBounds},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Layout {
@@ -137,6 +140,133 @@ impl Layout {
             pairs.push((udim_self, udim_other));
         }
         pairs
+    }
+
+    pub fn permute(&self, order: &[usize]) -> Self {
+        assert_eq!(order.len(), self.shape.len(), "Shapes not the same length");
+        // if the output vector must have every dim from 0-shape.len appear once
+        let mut seen = vec![false; self.shape.len()];
+        for &dim in order {
+            assert!(!seen[dim], "Duplicate dimension in permutation");
+            seen[dim] = true;
+        }
+
+        let mut new_shape = Vec::with_capacity(order.len());
+        let mut new_strides = Vec::with_capacity(order.len());
+
+        for &dim in order {
+            new_shape.push(self.shape[dim]);
+            new_strides.push(self.strides[dim]);
+        }
+
+        Layout {
+            shape: new_shape,
+            strides: new_strides,
+            offset: self.offset,
+        }
+    }
+
+    pub fn signed_dim_vec_to_unsigned_dim_vec(&self, dims: &[i32]) -> Vec<usize> {
+        dims.iter()
+            .map(|&dim| self.signed_dim_to_unsigned_dim(dim))
+            .collect()
+    }
+
+    pub fn is_contiguous(&self) -> bool {
+        // Check that strides are in decreasing order
+        self.strides.windows(2).all(|w| w[0] >= w[1])
+    }
+
+    pub fn merge(&self, start_dim: usize, end_dim: usize) -> Self {
+        assert!(
+            self.is_contiguous(),
+            "Layout must be contiguous to merge dimensions"
+        );
+        assert!(
+            start_dim <= end_dim && end_dim < self.shape.len(),
+            "Invalid dimension range: {} to {} for shape of length {}",
+            start_dim,
+            end_dim,
+            self.shape.len()
+        );
+
+        let mut shape = Vec::new();
+        shape.extend_from_slice(&self.shape[..start_dim]);
+        shape.push(self.shape[start_dim..=end_dim].iter().product());
+        if end_dim + 1 < self.shape.len() {
+            shape.extend_from_slice(&self.shape[(end_dim + 1)..]);
+        }
+
+        let mut strides = Vec::new();
+        strides.extend_from_slice(&self.strides[..start_dim]);
+        strides.push(self.strides[end_dim]);
+        if end_dim + 1 < self.shape.len() {
+            strides.extend_from_slice(&self.strides[(end_dim + 1)..]);
+        }
+
+        Layout {
+            shape,
+            strides,
+            offset: self.offset,
+        }
+    }
+
+    pub fn signed_dim_range_to_unsigned_dim_range(
+        &self,
+        dims: impl RangeBounds<i32>,
+    ) -> (usize, usize) {
+        let start = match dims.start_bound() {
+            Bound::Included(&dim) => self.signed_dim_to_unsigned_dim(dim),
+            Bound::Excluded(&dim) => self.signed_dim_to_unsigned_dim(dim) + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match dims.end_bound() {
+            Bound::Included(&dim) => self.signed_dim_to_unsigned_dim(dim) + 1,
+            Bound::Excluded(&dim) => self.signed_dim_to_unsigned_dim(dim),
+            Bound::Unbounded => self.shape.len(),
+        };
+        assert!(
+            start <= end && end <= self.shape.len(),
+            "Invalid dimension range"
+        );
+        (start, end)
+    }
+
+    pub fn split(&self, dim: usize, sizes: &[usize]) -> Self {
+        assert_eq!(
+            self.shape[dim],
+            sizes.iter().product(),
+            "Sizes do not sum to dimension size"
+        );
+
+        let mut shape = Vec::new();
+        shape.extend_from_slice(&self.shape[..dim]);
+        shape.extend_from_slice(sizes);
+        shape.extend_from_slice(&self.shape[(dim + 1)..]);
+
+        let mut strides = Vec::new();
+        strides.extend_from_slice(&self.strides[..dim]);
+        strides.extend(
+            sizes
+                .iter()
+                .rev()
+                .scan(1, |acc, &dim| {
+                    let current = *acc;
+                    *acc *= dim;
+                    Some(current)
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .map(|s| s * self.strides[dim]),
+        );
+        strides.extend_from_slice(&self.strides[(dim + 1)..]);
+
+        Layout {
+            shape,
+            strides,
+            offset: self.offset,
+        }
     }
 }
 
@@ -494,5 +624,664 @@ mod tests {
             generate_all_indices(shape, current, result);
             current.pop();
         }
+    }
+
+    #[test]
+    fn test_permute_identity() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let permuted = layout.permute(&[0, 1, 2]);
+
+        assert_eq!(permuted.shape, vec![2, 3, 4]);
+        assert_eq!(permuted.strides, vec![12, 4, 1]);
+        assert_eq!(permuted.offset, 0);
+    }
+
+    #[test]
+    fn test_permute_reverse() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let permuted = layout.permute(&[2, 1, 0]);
+
+        assert_eq!(permuted.shape, vec![4, 3, 2]);
+        assert_eq!(permuted.strides, vec![1, 4, 12]);
+        assert_eq!(permuted.offset, 0);
+    }
+
+    #[test]
+    fn test_permute_with_offset() {
+        let mut layout = Layout::new(vec![2, 3, 4]);
+        layout.offset = 10;
+        let permuted = layout.permute(&[2, 0, 1]);
+
+        assert_eq!(permuted.shape, vec![4, 2, 3]);
+        assert_eq!(permuted.strides, vec![1, 12, 4]);
+        assert_eq!(permuted.offset, 10);
+    }
+
+    #[test]
+    #[should_panic(expected = "Shapes not the same length")]
+    fn test_permute_wrong_length() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        layout.permute(&[0, 1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Duplicate dimension in permutation")]
+    fn test_permute_duplicate() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        layout.permute(&[0, 0, 1]);
+    }
+
+    #[test]
+    fn test_signed_dim_vec_to_unsigned_dim_vec() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+
+        let result = layout.signed_dim_vec_to_unsigned_dim_vec(&[0, -1, 2, -2]);
+        assert_eq!(result, vec![0, 3, 2, 2]);
+
+        let result2 = layout.signed_dim_vec_to_unsigned_dim_vec(&[-4, -3, -2, -1]);
+        assert_eq!(result2, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn test_merge_adjacent_dimensions() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+        let merged = layout.merge(1, 2);
+
+        assert_eq!(merged.shape, vec![2, 12, 5]);
+        assert_eq!(merged.strides, vec![60, 5, 1]);
+        assert_eq!(merged.offset, 0);
+    }
+
+    #[test]
+    fn test_merge_single_dimension() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let merged = layout.merge(1, 1);
+
+        assert_eq!(merged.shape, vec![2, 3, 4]);
+        assert_eq!(merged.strides, vec![12, 4, 1]);
+    }
+
+    #[test]
+    fn test_merge_all_dimensions() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let merged = layout.merge(0, 2);
+
+        assert_eq!(merged.shape, vec![24]);
+        assert_eq!(merged.strides, vec![1]);
+    }
+
+    #[test]
+    fn test_merge_with_offset() {
+        let mut layout = Layout::new(vec![2, 3, 4]);
+        layout.offset = 5;
+        let merged = layout.merge(0, 1);
+
+        assert_eq!(merged.shape, vec![6, 4]);
+        assert_eq!(merged.strides, vec![4, 1]);
+        assert_eq!(merged.offset, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid dimension range")]
+    fn test_merge_invalid_range() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        layout.merge(2, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid dimension range: 0 to 3 for shape of length 3")]
+    fn test_merge_out_of_bounds() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        layout.merge(0, 3);
+    }
+
+    #[test]
+    fn test_signed_dim_range_to_unsigned_dim_range() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+
+        let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(1..3);
+        assert_eq!((start, end), (1, 3));
+
+        let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(-2..);
+        assert_eq!((start, end), (2, 4));
+
+        let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(..=-1);
+        assert_eq!((start, end), (0, 4));
+
+        let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(..);
+        assert_eq!((start, end), (0, 4));
+    }
+
+    #[test]
+    fn test_split_dimension() {
+        let layout = Layout::new(vec![2, 6, 4]);
+        let split_layout = layout.split(1, &[2, 3]);
+
+        assert_eq!(split_layout.shape, vec![2, 2, 3, 4]);
+        assert_eq!(split_layout.strides, vec![24, 12, 4, 1]);
+        assert_eq!(split_layout.offset, 0);
+    }
+
+    #[test]
+    fn test_split_into_three() {
+        let layout = Layout::new(vec![12]);
+        let split_layout = layout.split(0, &[3, 2, 2]);
+
+        assert_eq!(split_layout.shape, vec![3, 2, 2]);
+        assert_eq!(split_layout.strides, vec![4, 2, 1]);
+    }
+
+    #[test]
+    fn test_split_with_offset() {
+        let mut layout = Layout::new(vec![2, 8]);
+        layout.offset = 10;
+        let split_layout = layout.split(1, &[2, 4]);
+
+        assert_eq!(split_layout.shape, vec![2, 2, 4]);
+        assert_eq!(split_layout.strides, vec![8, 4, 1]);
+        assert_eq!(split_layout.offset, 10);
+    }
+
+    #[test]
+    #[should_panic(expected = "Sizes do not sum to dimension size")]
+    fn test_split_size_mismatch() {
+        let layout = Layout::new(vec![2, 6, 4]);
+        layout.split(1, &[2, 2]);
+    }
+
+    #[test]
+    fn test_split_merge_roundtrip() {
+        let layout = Layout::new(vec![2, 6, 4]);
+        let split_layout = layout.split(1, &[2, 3]);
+        let merged_layout = split_layout.merge(1, 2);
+
+        assert_eq!(merged_layout.shape, layout.shape);
+        assert_eq!(merged_layout.strides, layout.strides);
+        assert_eq!(merged_layout.offset, layout.offset);
+    }
+
+    #[test]
+    fn test_broadcast_complex() {
+        let layout1 = Layout::new(vec![2, 1, 3]);
+        let layout2 = Layout::new(vec![4, 3, 1]);
+
+        let corresponding_dims = vec![(2, 1)];
+        let broadcasted = layout1.broadcast(&layout2, &corresponding_dims);
+
+        assert_eq!(broadcasted.shape, vec![2, 1, 3, 4, 1]);
+    }
+
+    #[test]
+    fn test_broadcast_multiple_corresponding() {
+        let layout1 = Layout::new(vec![2, 3, 1]);
+        let layout2 = Layout::new(vec![1, 4]);
+
+        let corresponding_dims = vec![(0, 0), (2, 1)];
+        let broadcasted = layout1.broadcast(&layout2, &corresponding_dims);
+
+        assert_eq!(broadcasted.shape, vec![2, 3, 1]);
+    }
+
+    #[test]
+    fn test_signed_operations_combined() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+
+        let unsigned_dims = layout.signed_dim_vec_to_unsigned_dim_vec(&[-1, -2]);
+        assert_eq!(unsigned_dims, vec![3, 2]);
+
+        let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(-3..-1);
+        assert_eq!((start, end), (1, 3));
+
+        let udim = layout.signed_dim_to_unsigned_dim(-4);
+        assert_eq!(udim, 0);
+    }
+
+    #[test]
+    fn test_edge_cases_empty_operations() {
+        let layout = Layout::new(vec![1]);
+        let merged = layout.merge(0, 0);
+        assert_eq!(merged.shape, vec![1]);
+
+        let split_layout = merged.split(0, &[1]);
+        assert_eq!(split_layout.shape, vec![1]);
+    }
+
+    #[test]
+    fn test_merge_split_permute_sequence() {
+        let layout = Layout::new(vec![2, 3, 4, 2]);
+        let merged = layout.merge(1, 2);
+        let split_layout = merged.split(1, &[4, 3]);
+        let permuted = split_layout.permute(&[0, 2, 1, 3]);
+
+        assert_eq!(permuted.shape, vec![2, 3, 4, 2]);
+        assert_eq!(permuted.count_elements(), 48);
+    }
+
+    #[test]
+    fn test_split_merge_permute_roundtrip() {
+        let original = Layout::new(vec![12, 2, 3]);
+        let split_layout = original.split(0, &[3, 4]);
+        let merged = split_layout.merge(0, 1);
+        let permuted = merged.permute(&[0, 1, 2]);
+
+        assert_eq!(permuted.shape, original.shape);
+        assert_eq!(permuted.strides, original.strides);
+    }
+
+    #[test]
+    fn test_split_multiple_dimensions_then_permute() {
+        let layout = Layout::new(vec![24, 6]);
+        let split1 = layout.split(0, &[4, 6]);
+        let split2 = split1.split(2, &[2, 3]);
+        let permuted = split2.permute(&[1, 3, 0, 2]);
+
+        assert_eq!(permuted.shape, vec![6, 3, 4, 2]);
+        assert_eq!(permuted.count_elements(), 144);
+    }
+
+    #[test]
+    fn test_permute_then_split_multiple_dimensions() {
+        let layout = Layout::new(vec![4, 6, 12]);
+        let permuted = layout.permute(&[2, 0, 1]);
+        assert_eq!(permuted.shape, vec![12, 4, 6]);
+        assert_eq!(permuted.strides, vec![1, 72, 12]);
+
+        let split1 = permuted.split(0, &[3, 4]);
+        assert_eq!(split1.shape, vec![3, 4, 4, 6]);
+        assert_eq!(split1.strides, vec![4, 1, 72, 12]);
+
+        let split2 = split1.split(2, &[2, 2]);
+        assert_eq!(split2.shape, vec![3, 4, 2, 2, 6]);
+        assert_eq!(split2.strides, vec![4, 1, 144, 72, 12]);
+    }
+
+    #[test]
+    fn test_merge_split_permute_with_offset() {
+        let mut layout = Layout::new(vec![2, 4, 3, 2]);
+        layout.offset = 100;
+
+        let merged = layout.merge(1, 2);
+        let split_layout = merged.split(1, &[6, 2]);
+        let permuted = split_layout.permute(&[0, 2, 1, 3]);
+
+        assert_eq!(permuted.offset, 100);
+        assert_eq!(permuted.count_elements(), 48);
+
+        for i in layout.offset..(layout.offset + layout.count_elements()) {
+            let indices = layout.unravel_index(i);
+            let flat = layout.ravel_index(&indices);
+            assert_eq!(i, flat);
+        }
+    }
+
+    #[test]
+    fn test_alternating_split_merge_with_permute_retains_element_count() {
+        let layout = Layout::new(vec![4, 6, 8]);
+        let split1 = layout.split(1, &[2, 3]);
+        let merged1 = split1.merge(0, 1);
+        let permuted1 = merged1.permute(&[0, 2, 1]);
+        let split2 = permuted1.split(0, &[2, 4]);
+
+        assert_eq!(split2.count_elements(), layout.count_elements());
+    }
+
+    #[test]
+    fn test_permute_preserves_split_merge_retains_element_count() {
+        let layout = Layout::new(vec![6, 4, 9]);
+        let split_layout = layout.split(2, &[3, 3]);
+
+        for perm in &[
+            vec![0, 1, 2, 3],
+            vec![3, 2, 1, 0],
+            vec![1, 0, 3, 2],
+            vec![2, 3, 0, 1],
+        ] {
+            let permuted = split_layout.permute(perm);
+            assert_eq!(permuted.count_elements(), layout.count_elements());
+        }
+    }
+
+    #[test]
+    fn test_identity_operations_chain() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let permuted = layout.permute(&[0, 1, 2]);
+        let split_layout = permuted.split(1, &[3]);
+        let merged = split_layout.merge(1, 1);
+
+        assert_eq!(merged.shape, layout.shape);
+        assert_eq!(merged.strides, layout.strides);
+        assert_eq!(merged.offset, layout.offset);
+    }
+
+    #[test]
+    fn test_split_first_dimension_multiple_ways() {
+        let layout = Layout::new(vec![24, 5]);
+
+        let split1 = layout.split(0, &[2, 12]);
+        assert_eq!(split1.shape, vec![2, 12, 5]);
+        assert_eq!(split1.strides, vec![60, 5, 1]);
+
+        let split2 = layout.split(0, &[3, 8]);
+        assert_eq!(split2.shape, vec![3, 8, 5]);
+        assert_eq!(split2.strides, vec![40, 5, 1]);
+
+        let split3 = layout.split(0, &[4, 6]);
+        assert_eq!(split3.shape, vec![4, 6, 5]);
+        assert_eq!(split3.strides, vec![30, 5, 1]);
+    }
+
+    #[test]
+    fn test_merge_then_permute_multiple_orders() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+
+        let merged1 = layout.merge(1, 2);
+        let permuted1 = merged1.permute(&[0, 2, 1]);
+        assert_eq!(permuted1.shape, vec![2, 5, 12]);
+
+        let merged2 = layout.merge(0, 1);
+        let permuted2 = merged2.permute(&[1, 0, 2]);
+        assert_eq!(permuted2.shape, vec![4, 6, 5]);
+
+        let merged3 = layout.merge(2, 3);
+        let permuted3 = merged3.permute(&[2, 0, 1]);
+        assert_eq!(permuted3.shape, vec![20, 2, 3]);
+    }
+
+    #[test]
+    fn test_split_then_merge_different_ranges() {
+        let layout = Layout::new(vec![2, 3, 4, 5, 6]);
+        let split_layout = layout.split(2, &[2, 2]);
+        assert_eq!(split_layout.shape, vec![2, 3, 2, 2, 5, 6]);
+
+        let merged1 = split_layout.merge(1, 3);
+        assert_eq!(merged1.shape, vec![2, 12, 5, 6]);
+
+        let merged2 = split_layout.merge(0, 2);
+        assert_eq!(merged2.shape, vec![12, 2, 5, 6]);
+
+        let merged3 = split_layout.merge(4, 5);
+        assert_eq!(merged3.shape, vec![2, 3, 2, 2, 30]);
+    }
+
+    #[test]
+    fn test_split_multiple_dimensions_then_merge() {
+        let layout = Layout::new(vec![60, 4]);
+        let split1 = layout.split(0, &[5, 12]);
+        let split2 = split1.split(1, &[3, 4]);
+
+        assert_eq!(split2.shape, vec![5, 3, 4, 4]);
+        assert_eq!(split2.strides, vec![48, 16, 4, 1]);
+
+        let merged = split2.merge(1, 2);
+        assert_eq!(merged.shape, vec![5, 12, 4]);
+    }
+
+    #[test]
+    fn test_split_last_dimension_various_ways() {
+        let layout = Layout::new(vec![3, 4, 12]);
+
+        let split1 = layout.split(2, &[2, 6]);
+        assert_eq!(split1.shape, vec![3, 4, 2, 6]);
+        assert_eq!(split1.strides, vec![48, 12, 6, 1]);
+
+        let split2 = layout.split(2, &[3, 4]);
+        assert_eq!(split2.shape, vec![3, 4, 3, 4]);
+        assert_eq!(split2.strides, vec![48, 12, 4, 1]);
+
+        let split3 = layout.split(2, &[4, 3]);
+        assert_eq!(split3.shape, vec![3, 4, 4, 3]);
+        assert_eq!(split3.strides, vec![48, 12, 3, 1]);
+    }
+
+    #[test]
+    fn test_merge_then_split_different_factorizations() {
+        let layout = Layout::new(vec![2, 3, 4, 5, 6]);
+        let merged_all = layout.merge(0, 4);
+
+        assert_eq!(merged_all.shape, vec![720]);
+        assert_eq!(merged_all.strides, vec![1]);
+
+        let split1 = merged_all.split(0, &[8, 90]);
+        assert_eq!(split1.shape, vec![8, 90]);
+
+        let split2 = merged_all.split(0, &[24, 30]);
+        assert_eq!(split2.shape, vec![24, 30]);
+
+        let split3 = merged_all.split(0, &[9, 80]);
+        assert_eq!(split3.shape, vec![9, 80]);
+    }
+
+    #[test]
+    fn test_split_into_many_dimensions_then_permute() {
+        let layout = Layout::new(vec![120]);
+        let split_layout = layout.split(0, &[2, 3, 4, 5]);
+
+        assert_eq!(split_layout.shape, vec![2, 3, 4, 5]);
+        assert_eq!(split_layout.strides, vec![60, 20, 5, 1]);
+
+        let permuted = split_layout.permute(&[3, 1, 0, 2]);
+        assert_eq!(permuted.shape, vec![5, 3, 2, 4]);
+        assert_eq!(permuted.strides, vec![1, 20, 60, 5]);
+    }
+
+    #[test]
+    fn test_multiple_consecutive_splits_then_merge() {
+        let layout = Layout::new(vec![144, 3]);
+        let split1 = layout.split(0, &[12, 12]);
+        let split2 = split1.split(0, &[3, 4]);
+        let split3 = split2.split(2, &[2, 6]);
+
+        assert_eq!(split3.shape, vec![3, 4, 2, 6, 3]);
+        assert_eq!(split3.count_elements(), 432);
+
+        let merged1 = split3.merge(0, 1);
+        assert_eq!(merged1.shape, vec![12, 2, 6, 3]);
+
+        let merged2 = split3.merge(2, 3);
+        assert_eq!(merged2.shape, vec![3, 4, 12, 3]);
+    }
+
+    #[test]
+    fn test_split_merge_same_dimension_roundtrip() {
+        let layout = Layout::new(vec![2, 8, 3, 4]);
+        let merged = layout.merge(1, 2);
+
+        assert_eq!(merged.shape, vec![2, 24, 4]);
+
+        let split_back = merged.split(1, &[8, 3]);
+        assert_eq!(split_back.shape, vec![2, 8, 3, 4]);
+        assert_eq!(split_back.strides, layout.strides);
+    }
+
+    #[test]
+    fn test_split_different_dimensions_preserve_contiguity() {
+        let layout = Layout::new(vec![5, 4, 6, 2]);
+
+        let split1 = layout.split(0, &[1, 5]);
+        assert_eq!(split1.shape, vec![1, 5, 4, 6, 2]);
+        assert!(split1.is_contiguous());
+
+        let split2 = layout.split(2, &[3, 2]);
+        assert_eq!(split2.shape, vec![5, 4, 3, 2, 2]);
+        assert!(split2.is_contiguous());
+    }
+
+    #[test]
+    fn test_merge_overlapping_ranges() {
+        let layout = Layout::new(vec![2, 24, 5]);
+        let split_layout = layout.split(1, &[4, 6]);
+
+        assert_eq!(split_layout.shape, vec![2, 4, 6, 5]);
+
+        let merged1 = split_layout.merge(0, 2);
+        assert_eq!(merged1.shape, vec![48, 5]);
+
+        let merged2 = split_layout.merge(1, 3);
+        assert_eq!(merged2.shape, vec![2, 120]);
+    }
+
+    #[test]
+    fn test_split_merge_with_offset_preservation() {
+        let mut layout = Layout::new(vec![3, 8, 4]);
+        layout.offset = 25;
+
+        let split_layout = layout.split(1, &[2, 4]);
+        assert_eq!(split_layout.offset, 25);
+
+        let merged = split_layout.merge(1, 2);
+        assert_eq!(merged.offset, 25);
+        assert_eq!(merged.shape, vec![3, 8, 4]);
+    }
+
+    #[test]
+    fn test_permute_different_orders_preserve_elements() {
+        let test_cases = vec![
+            vec![6, 4, 5],
+            vec![2, 9, 2, 3],
+            vec![12, 8],
+            vec![3, 3, 3, 3],
+        ];
+
+        for shape in test_cases {
+            let layout = Layout::new(shape);
+            let original_count = layout.count_elements();
+
+            let permuted1 = layout.permute(&(0..layout.shape.len()).rev().collect::<Vec<_>>());
+            assert_eq!(permuted1.count_elements(), original_count);
+
+            let indices: Vec<usize> = (0..layout.shape.len()).collect();
+            let permuted2 = layout.permute(&indices);
+            assert_eq!(permuted2.count_elements(), original_count);
+        }
+    }
+
+    #[test]
+    fn test_split_single_element_dimensions() {
+        let layout = Layout::new(vec![1, 12, 1, 6]);
+        let split_layout = layout.split(1, &[3, 4]);
+
+        assert_eq!(split_layout.shape, vec![1, 3, 4, 1, 6]);
+
+        let merged = split_layout.merge(0, 2);
+        assert_eq!(merged.shape, vec![12, 1, 6]);
+    }
+
+    #[test]
+    fn test_split_dimensions_factorization() {
+        let layout = Layout::new(vec![30, 8]);
+
+        let split1 = layout.split(0, &[5, 6]);
+        let split2 = split1.split(1, &[2, 3]);
+        let split3 = split2.split(3, &[2, 4]);
+
+        assert_eq!(split3.shape, vec![5, 2, 3, 2, 4]);
+        assert_eq!(split3.count_elements(), 240);
+
+        let merged = split3.merge(1, 2);
+        assert_eq!(merged.shape, vec![5, 6, 2, 4]);
+    }
+
+    #[test]
+    fn test_permute_identity_operations() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+        let identity_perm = layout.permute(&[0, 1, 2, 3]);
+
+        assert_eq!(identity_perm.shape, layout.shape);
+        assert_eq!(identity_perm.strides, layout.strides);
+        assert_eq!(identity_perm.offset, layout.offset);
+    }
+
+    #[test]
+    fn test_merge_sequential_dimensions() {
+        let layout = Layout::new(vec![2, 3, 4, 5, 6]);
+
+        let merged1 = layout.merge(0, 2);
+        assert_eq!(merged1.shape, vec![24, 5, 6]);
+
+        let merged2 = layout.merge(2, 4);
+        assert_eq!(merged2.shape, vec![2, 3, 120]);
+
+        let merged3 = layout.merge(1, 3);
+        assert_eq!(merged3.shape, vec![2, 60, 6]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Layout must be contiguous to merge dimensions")]
+    fn test_merge_after_non_trivial_permute_fails() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let permuted = layout.permute(&[2, 0, 1]);
+        permuted.merge(0, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Layout must be contiguous to merge dimensions")]
+    fn test_merge_after_reverse_permute_fails() {
+        let layout = Layout::new(vec![2, 3, 4, 5]);
+        let permuted = layout.permute(&[3, 2, 1, 0]);
+        permuted.merge(1, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Layout must be contiguous to merge dimensions")]
+    fn test_merge_after_swap_permute_fails() {
+        let layout = Layout::new(vec![4, 6]);
+        let permuted = layout.permute(&[1, 0]);
+        permuted.merge(0, 1);
+    }
+
+    #[test]
+    fn test_merge_after_identity_permute_succeeds() {
+        let layout = Layout::new(vec![2, 3, 4]);
+        let permuted = layout.permute(&[0, 1, 2]);
+        let merged = permuted.merge(1, 2);
+
+        assert_eq!(merged.shape, vec![2, 12]);
+    }
+
+    #[test]
+    fn test_complex_split_merge_chains() {
+        let layout = Layout::new(vec![4, 6, 8, 3]);
+        let split1 = layout.split(1, &[2, 3]);
+        let merged1 = split1.merge(1, 2);
+        let split2 = merged1.split(1, &[3, 2]);
+        let merged2 = split2.merge(2, 3);
+
+        assert_eq!(merged2.shape, vec![4, 3, 16, 3]);
+        assert_eq!(merged2.count_elements(), layout.count_elements());
+    }
+
+    #[test]
+    fn test_alternating_split_merge_operations() {
+        let mut layout = Layout::new(vec![2, 12, 4]);
+        layout.offset = 50;
+
+        let original_elements = layout.count_elements();
+        let original_offset = layout.offset;
+
+        let split1 = layout.split(1, &[3, 4]);
+        let merged1 = split1.merge(1, 2);
+        let split2 = merged1.split(1, &[6, 2]);
+        let merged2 = split2.merge(1, 2);
+
+        assert_eq!(merged2.count_elements(), original_elements);
+        assert_eq!(merged2.offset, original_offset);
+        assert_eq!(merged2.shape, vec![2, 12, 4]);
+    }
+
+    #[test]
+    fn test_split_then_permute_various_orders() {
+        let layout = Layout::new(vec![24, 6]);
+        let split_layout = layout.split(0, &[4, 6]);
+
+        assert_eq!(split_layout.shape, vec![4, 6, 6]);
+
+        let perm1 = split_layout.permute(&[1, 2, 0]);
+        assert_eq!(perm1.shape, vec![6, 6, 4]);
+
+        let perm2 = split_layout.permute(&[2, 0, 1]);
+        assert_eq!(perm2.shape, vec![6, 4, 6]);
+
+        let perm3 = split_layout.permute(&[0, 2, 1]);
+        assert_eq!(perm3.shape, vec![4, 6, 6]);
     }
 }
