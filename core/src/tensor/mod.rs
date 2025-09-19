@@ -1,3 +1,5 @@
+use std::ops::RangeBounds;
+
 use crate::backends::Backend;
 use crate::backends::{
     broadcast::{Broadcast, BroadcastFunc},
@@ -19,6 +21,35 @@ pub struct Tensor<S: Storage> {
 impl<S: Storage> Tensor<S> {
     pub fn new(layout: Layout, storage: S) -> Self {
         Self { layout, storage }
+    }
+
+    pub fn permute(&self, order: Vec<i32>) -> Tensor<S> {
+        let new_layout = self
+            .layout
+            .permute(&self.layout.signed_dim_vec_to_unsigned_dim_vec(&order));
+        Tensor::new(new_layout, self.storage.clone())
+    }
+
+    pub fn split(&self, dim: i32, sizes: Vec<usize>) -> Tensor<S> {
+        let new_layout = self
+            .layout
+            .split(self.layout.signed_dim_to_unsigned_dim(dim), &sizes);
+        Tensor::new(new_layout, self.storage.clone())
+    }
+
+    pub fn merge(&self, dim_range: impl RangeBounds<i32>) -> Tensor<S> {
+        let (start_dim, end_dim) = self
+            .layout
+            .signed_dim_range_to_unsigned_dim_range(dim_range);
+        let new_layout = self.layout.merge(start_dim, end_dim);
+        Tensor::new(new_layout, self.storage.clone())
+    }
+
+    pub fn contiguous(&self) -> Tensor<S> {
+        Tensor::new(
+            Layout::new(self.layout.shape.clone()),
+            self.storage.contiguous(&self.layout),
+        )
     }
 
     pub fn map<B, F, R>(self, f: F) -> Tensor<R>

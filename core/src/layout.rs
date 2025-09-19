@@ -221,8 +221,8 @@ impl Layout {
             Bound::Unbounded => 0,
         };
         let end = match dims.end_bound() {
-            Bound::Included(&dim) => self.signed_dim_to_unsigned_dim(dim) + 1,
-            Bound::Excluded(&dim) => self.signed_dim_to_unsigned_dim(dim),
+            Bound::Included(&dim) => self.signed_dim_to_unsigned_dim(dim),
+            Bound::Excluded(&dim) => self.signed_dim_to_unsigned_dim(dim) - 1,
             Bound::Unbounded => self.shape.len(),
         };
         assert!(

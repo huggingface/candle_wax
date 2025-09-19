@@ -1,5 +1,71 @@
 #[cfg(test)]
-mod tests {
+mod core_tests {
+    use core::{Layout, tensor::Tensor};
+    use storage::cpu::CpuStorage;
+
+    #[test]
+    fn test_permute() {
+        let tensor = Tensor::new(
+            Layout::new(vec![3, 2, 2]),
+            CpuStorage {
+                data: vec![
+                    1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+                ],
+            },
+        );
+
+        let permuted = tensor.permute(vec![2, 0, 1]);
+        assert_eq!(permuted.layout.shape, &[2, 3, 2]);
+        assert_eq!(
+            permuted.storage.data,
+            vec![
+                1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
+            ]
+        );
+
+        let contiguous = permuted.contiguous();
+        assert_eq!(contiguous.layout.shape, &[2, 3, 2]);
+        assert_eq!(
+            contiguous.storage.data,
+            vec![
+                1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
+            ]
+        );
+    }
+
+    #[test]
+    fn test_merge_split() {
+        let tensor = Tensor::new(
+            Layout::new(vec![3, 2, 2]),
+            CpuStorage {
+                data: vec![
+                    1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+                ],
+            },
+        );
+
+        let merge = tensor.merge(..=1);
+        assert_eq!(merge.layout.shape, &[6, 2]);
+        assert_eq!(
+            merge.storage.data,
+            vec![
+                1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ]
+        );
+
+        let split = merge.split(0, vec![2, 3]);
+        assert_eq!(split.layout.shape, &[2, 3, 2]);
+        assert_eq!(
+            split.storage.data,
+            vec![
+                1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod backend_ops_tests {
     use backends::cpu::CpuBackend;
     use core::{
         Layout,

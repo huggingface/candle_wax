@@ -22,6 +22,20 @@ pub struct MyNewStorage<T: MyNewDtype> {
 
 impl<T: MyNewDtype> Storage for MyNewStorage<T> {
     type Inner = T;
+
+    fn contiguous(&self, layout: &Layout) -> Self {
+        let output_layout = Layout::new(layout.shape.clone());
+        let mut output_data = Vec::with_capacity(layout.count_elements());
+
+        for (output_idx, output_elem) in output_data.iter_mut().enumerate() {
+            let output_idx_unraveled = output_layout.unravel_index(output_idx);
+            let input_idx = layout.ravel_index(&output_idx_unraveled);
+
+            *output_elem = self.data[input_idx].clone();
+        }
+
+        MyNewStorage { data: output_data }
+    }
 }
 
 #[derive(BackendOps)]
