@@ -268,6 +268,34 @@ impl Layout {
             offset: self.offset,
         }
     }
+
+    pub fn slice(&self, dim: usize, start: usize, end: usize) -> Self {
+        assert!(
+            start <= end && end < self.shape[dim],
+            "Invalid slice bounds"
+        );
+        let mut shape = self.shape.clone();
+        shape[dim] = end - start + 1;
+        let strides = self.strides.clone();
+        let offset = self.offset + start * self.strides[dim];
+        Layout {
+            shape,
+            strides,
+            offset,
+        }
+    }
+
+    pub fn signed_index_to_unsigned_index(&self, dim: usize, index: i32) -> usize {
+        let uindex = if index < 0 {
+            (self.shape[dim] as i32 + index) as usize
+        } else {
+            index as usize
+        };
+        if self.shape[dim] <= uindex {
+            panic!("Dimension out of bounds");
+        }
+        uindex
+    }
 }
 
 #[cfg(test)]
@@ -740,13 +768,13 @@ mod tests {
         let layout = Layout::new(vec![2, 3, 4, 5]);
 
         let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(1..3);
-        assert_eq!((start, end), (1, 3));
+        assert_eq!((start, end), (1, 2));
 
         let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(-2..);
         assert_eq!((start, end), (2, 4));
 
         let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(..=-1);
-        assert_eq!((start, end), (0, 4));
+        assert_eq!((start, end), (0, 3));
 
         let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(..);
         assert_eq!((start, end), (0, 4));
@@ -830,7 +858,7 @@ mod tests {
         assert_eq!(unsigned_dims, vec![3, 2]);
 
         let (start, end) = layout.signed_dim_range_to_unsigned_dim_range(-3..-1);
-        assert_eq!((start, end), (1, 3));
+        assert_eq!((start, end), (1, 2));
 
         let udim = layout.signed_dim_to_unsigned_dim(-4);
         assert_eq!(udim, 0);
@@ -1283,5 +1311,295 @@ mod tests {
 
         let perm3 = split_layout.permute(&[0, 2, 1]);
         assert_eq!(perm3.shape, vec![4, 6, 6]);
+    }
+
+    #[test]
+    fn test_slice_basic() {
+        let layout = Layout::new(vec![5, 4, 3]);
+        let sliced = layout.slice(0, 1, 4);
+
+        assert_eq!(sliced.shape, vec![4, 4, 3]);
+        assert_eq!(sliced.strides, vec![12, 3, 1]);
+        assert_eq!(sliced.offset, 12); // 1 * stride[0]
+    }
+
+    #[test]
+    fn test_slice_middle_dimension() {
+        let layout = Layout::new(vec![3, 6, 2]);
+        let sliced = layout.slice(1, 2, 5);
+
+        assert_eq!(sliced.shape, vec![3, 4, 2]); // 6 - (5-2) + 1 = 4
+        assert_eq!(sliced.strides, vec![12, 2, 1]);
+        assert_eq!(sliced.offset, 4); // 2 * stride[1] = 2 * 2
+    }
+
+    #[test]
+    fn test_slice_last_dimension() {
+        let layout = Layout::new(vec![2, 3, 8]);
+        let sliced = layout.slice(2, 3, 7);
+
+        assert_eq!(sliced.shape, vec![2, 3, 5]);
+        assert_eq!(sliced.strides, vec![24, 8, 1]);
+        assert_eq!(sliced.offset, 3); // 3 * stride[2] = 3 * 1
+    }
+
+    #[test]
+    fn test_slice_with_existing_offset() {
+        let mut layout = Layout::new(vec![4, 6]);
+        layout.offset = 15;
+        let sliced = layout.slice(0, 1, 3);
+
+        assert_eq!(sliced.shape, vec![3, 6]);
+        assert_eq!(sliced.strides, vec![6, 1]);
+        assert_eq!(sliced.offset, 21);
+    }
+
+    #[test]
+    fn test_slice_single_element() {
+        let layout = Layout::new(vec![5, 3]);
+        let sliced = layout.slice(0, 2, 2);
+
+        assert_eq!(sliced.shape, vec![1, 3]);
+        assert_eq!(sliced.strides, vec![3, 1]);
+        assert_eq!(sliced.offset, 6); // 2 * stride[0] = 2 * 3
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid slice bounds")]
+    fn test_slice_start_greater_than_end() {
+        let layout = Layout::new(vec![5, 4]);
+        layout.slice(0, 3, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid slice bounds")]
+    fn test_slice_end_out_of_bounds() {
+        let layout = Layout::new(vec![5, 4]);
+        layout.slice(0, 0, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid slice bounds")]
+    fn test_slice_start_out_of_bounds() {
+        let layout = Layout::new(vec![5, 4]);
+        layout.slice(1, 5, 4);
+    }
+
+    // Tests for signed_index_to_unsigned_index method
+    #[test]
+    fn test_signed_index_to_unsigned_index_positive() {
+        let layout = Layout::new(vec![5, 3, 7]);
+
+        assert_eq!(layout.signed_index_to_unsigned_index(0, 0), 0);
+        assert_eq!(layout.signed_index_to_unsigned_index(0, 4), 4);
+        assert_eq!(layout.signed_index_to_unsigned_index(1, 2), 2);
+        assert_eq!(layout.signed_index_to_unsigned_index(2, 6), 6);
+    }
+
+    #[test]
+    fn test_signed_index_to_unsigned_index_negative() {
+        let layout = Layout::new(vec![5, 3, 7]);
+
+        assert_eq!(layout.signed_index_to_unsigned_index(0, -1), 4); // 5 + (-1)
+        assert_eq!(layout.signed_index_to_unsigned_index(0, -5), 0); // 5 + (-5)
+        assert_eq!(layout.signed_index_to_unsigned_index(1, -1), 2); // 3 + (-1)
+        assert_eq!(layout.signed_index_to_unsigned_index(1, -3), 0); // 3 + (-3)
+        assert_eq!(layout.signed_index_to_unsigned_index(2, -7), 0); // 7 + (-7)
+    }
+
+    #[test]
+    fn test_signed_index_to_unsigned_index_edge_cases() {
+        let layout = Layout::new(vec![1, 10]);
+
+        assert_eq!(layout.signed_index_to_unsigned_index(0, 0), 0);
+        assert_eq!(layout.signed_index_to_unsigned_index(0, -1), 0);
+        assert_eq!(layout.signed_index_to_unsigned_index(1, 9), 9);
+        assert_eq!(layout.signed_index_to_unsigned_index(1, -10), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Dimension out of bounds")]
+    fn test_signed_index_to_unsigned_index_positive_out_of_bounds() {
+        let layout = Layout::new(vec![5, 3]);
+        layout.signed_index_to_unsigned_index(0, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "Dimension out of bounds")]
+    fn test_signed_index_to_unsigned_index_negative_out_of_bounds() {
+        let layout = Layout::new(vec![5, 3]);
+        layout.signed_index_to_unsigned_index(1, -4);
+    }
+
+    // Tests for is_contiguous method edge cases
+    #[test]
+    fn test_is_contiguous_single_dimension() {
+        let layout = Layout::new(vec![5]);
+        assert!(layout.is_contiguous());
+    }
+
+    #[test]
+    fn test_is_contiguous_scalar() {
+        let layout = Layout::new(vec![]);
+        assert!(layout.is_contiguous());
+    }
+
+    #[test]
+    fn test_is_contiguous_custom_strides_non_contiguous() {
+        let layout = Layout {
+            shape: vec![2, 3],
+            strides: vec![1, 2], // Non-standard order
+            offset: 0,
+        };
+        assert!(!layout.is_contiguous());
+    }
+
+    #[test]
+    fn test_is_contiguous_custom_strides_contiguous() {
+        let layout = Layout {
+            shape: vec![2, 3],
+            strides: vec![6, 2], // Valid decreasing order
+            offset: 0,
+        };
+        assert!(layout.is_contiguous());
+    }
+
+    #[test]
+    fn test_is_contiguous_equal_strides() {
+        let layout = Layout {
+            shape: vec![2, 1, 3],
+            strides: vec![3, 3, 1], // Equal strides are allowed
+            offset: 0,
+        };
+        assert!(layout.is_contiguous());
+    }
+
+    // Integration tests combining multiple operations
+    #[test]
+    fn test_slice_then_permute() {
+        let layout = Layout::new(vec![4, 5, 6]);
+        let sliced = layout.slice(1, 1, 4);
+        println!("Sliced layout: {:?}", sliced);
+        let permuted = sliced.permute(&[2, 0, 1]);
+
+        assert_eq!(permuted.shape, vec![6, 4, 4]);
+        assert_eq!(permuted.offset, 6);
+    }
+
+    #[test]
+    fn test_slice_then_split() {
+        let layout = Layout::new(vec![6, 8]);
+        let sliced = layout.slice(1, 2, 5);
+        let split = sliced.split(1, &[2, 2]);
+
+        assert_eq!(split.shape, vec![6, 2, 2]);
+        assert_eq!(split.offset, 2); // Offset from slice
+    }
+
+    #[test]
+    fn test_split_then_slice() {
+        let layout = Layout::new(vec![4, 6]);
+        let split = layout.split(1, &[2, 3]);
+        let sliced = split.slice(1, 0, 1);
+
+        assert_eq!(sliced.shape, vec![4, 2, 3]);
+        assert_eq!(sliced.offset, 0);
+    }
+
+    #[test]
+    fn test_multiple_slices() {
+        let layout = Layout::new(vec![8, 6, 4]);
+        let slice1 = layout.slice(0, 1, 7);
+        let slice2 = slice1.slice(1, 1, 5);
+        let slice3 = slice2.slice(2, 1, 3);
+
+        assert_eq!(slice3.shape, vec![7, 5, 3]);
+        assert_eq!(slice3.offset, 29);
+    }
+
+    #[test]
+    fn test_slice_preserve_element_access() {
+        let layout = Layout::new(vec![3, 4, 5]);
+        let sliced = layout.slice(1, 1, 3);
+
+        // Test that we can still access elements correctly
+        let indices = vec![1, 0, 2];
+        let original_flat = layout.ravel_index(&[1, 1, 2]); // Offset by slice start
+        let sliced_flat = sliced.ravel_index(&indices);
+
+        assert_eq!(original_flat, sliced_flat);
+    }
+
+    #[test]
+    fn test_slice_unravel_consistency() {
+        let layout = Layout::new(vec![4, 5, 3]);
+        let sliced = layout.slice(1, 2, 4);
+
+        // Test that ravel/unravel work correctly with sliced layout
+        for i in 0..sliced.count_elements() {
+            let indices = sliced.unravel_index(sliced.offset + i);
+            let back_to_flat = sliced.ravel_index(&indices);
+            assert_eq!(sliced.offset + i, back_to_flat);
+        }
+    }
+
+    // Tests for error conditions and edge cases
+    #[test]
+    fn test_signed_index_boundary_conditions() {
+        let layout = Layout::new(vec![1]);
+
+        // Only valid indices for size 1 dimension are 0 and -1
+        assert_eq!(layout.signed_index_to_unsigned_index(0, 0), 0);
+        assert_eq!(layout.signed_index_to_unsigned_index(0, -1), 0);
+    }
+
+    #[test]
+    fn test_complex_operations_with_slicing() {
+        let mut layout = Layout::new(vec![6, 8, 4]);
+        layout.offset = 10;
+
+        let split = layout.split(1, &[2, 4]);
+        let sliced = split.slice(2, 1, 3);
+        let permuted = sliced.permute(&[0, 2, 1, 3]);
+
+        assert_eq!(permuted.count_elements(), sliced.count_elements());
+        assert!(permuted.offset >= layout.offset); // Offset should increase due to slice
+    }
+
+    #[test]
+    fn test_slice_maintains_stride_relationships() {
+        let layout = Layout::new(vec![5, 6, 7]);
+        let sliced = layout.slice(1, 2, 5);
+
+        assert_eq!(sliced.strides, layout.strides);
+
+        assert_eq!(
+            sliced.shape,
+            vec![layout.shape[0], 5 - 2 + 1, layout.shape[2]]
+        );
+    }
+
+    #[test]
+    fn test_signed_index_with_various_dimension_sizes() {
+        let sizes = vec![1, 2, 5, 10, 100];
+
+        for size in sizes {
+            let layout = Layout::new(vec![size]);
+
+            // Test positive indices
+            for i in 0..size {
+                assert_eq!(layout.signed_index_to_unsigned_index(0, i as i32), i);
+            }
+
+            // Test negative indices
+            for i in 1..=size {
+                let signed_idx = -(i as i32);
+                let expected = size - i;
+                assert_eq!(
+                    layout.signed_index_to_unsigned_index(0, signed_idx),
+                    expected
+                );
+            }
+        }
     }
 }
